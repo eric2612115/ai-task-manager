@@ -2,10 +2,12 @@ import os
 from typing import Dict, Any, List, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+from dotenv import load_dotenv, find_dotenv
 import secrets
 from cryptography.fernet import Fernet
 
 class Settings(BaseSettings):
+    load_dotenv(find_dotenv())
     # 應用程式基本配置
     APP_NAME: str = "Task Management API"
     API_V1_PREFIX: str = "/api/v1"
@@ -20,7 +22,7 @@ class Settings(BaseSettings):
     
     # 文件存儲配置
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
-    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB
+    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", 10485760))
     ALLOWED_UPLOAD_TYPES: List[str] = ["image/jpeg", "image/png", "image/gif", "application/pdf", 
                                        "text/plain", "application/msword", 
                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -47,8 +49,29 @@ class Settings(BaseSettings):
     # Git凭证加密密钥
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "zULrahkKOCpvWbhfr-PNc_jMTJYqXEucc_Nw85GNjfk=")  # 固定默认密钥，仅用于开发环境
     
+    # ChromaDB 配置
+    CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+    CHROMA_COLLECTION_CODE: str = os.getenv("CHROMA_COLLECTION_CODE", "code_embeddings")
+    CHROMA_COLLECTION_DOCS: str = os.getenv("CHROMA_COLLECTION_DOCS", "doc_embeddings")
+
+    # 模型配置
+    CODEBERT_MODEL: str = os.getenv("CODEBERT_MODEL", "microsoft/codebert-base")
+    SENTENCE_TRANSFORMER_MODEL: str = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
+
+    # LLM 配置
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "openai")  # openai, anthropic, google
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+    ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
+    GOOGLE_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
+    
     @field_validator("UPLOAD_DIR")
     def create_upload_dir_if_not_exists(cls, v):
+        os.makedirs(v, exist_ok=True)
+        return v
+    
+    # 确保ChromaDB持久化目录存在
+    @field_validator("CHROMA_PERSIST_DIR")
+    def create_chroma_dir_if_not_exists(cls, v):
         os.makedirs(v, exist_ok=True)
         return v
     

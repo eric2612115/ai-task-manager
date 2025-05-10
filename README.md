@@ -130,3 +130,85 @@ http://localhost:8000/api/v1/docs
 ## 许可证
 
 [指定许可证类型]
+
+## RAG 系統 (檢索增強生成)
+
+本項目集成了強大的RAG（檢索增強生成）系統，支持對代碼庫和文檔進行語義搜索和智能問答。
+
+### 特點
+
+- 使用ChromaDB作為向量數據庫
+- 使用CodeBERT處理代碼嵌入
+- 使用SentenceTransformer處理文檔嵌入
+- 支持多種LLM（OpenAI、Anthropic、Google）
+- 高效的代碼和文檔分塊策略
+
+### 環境配置
+
+在`.env`文件中添加以下配置:
+
+```
+# ChromaDB 配置
+CHROMA_PERSIST_DIR="./chroma_db"
+CHROMA_COLLECTION_CODE="code_embeddings"
+CHROMA_COLLECTION_DOCS="doc_embeddings"
+
+# 模型配置
+CODEBERT_MODEL="microsoft/codebert-base"
+SENTENCE_TRANSFORMER_MODEL="all-MiniLM-L6-v2"
+
+# LLM 配置
+LLM_PROVIDER="openai"  # openai, anthropic, google
+OPENAI_API_KEY="your-openai-api-key"
+# 或者使用其他LLM提供商
+# ANTHROPIC_API_KEY="your-anthropic-api-key"
+# GOOGLE_API_KEY="your-google-api-key"
+```
+
+### 使用方法
+
+1. 首先為倉庫生成嵌入:
+   ```
+   POST /api/v1/rag/embeddings/generate/{repo_id}
+   {
+     "repo_id": "your-repo-id",
+     "force_regenerate": false
+   }
+   ```
+
+2. 檢查嵌入生成狀態:
+   ```
+   GET /api/v1/rag/embeddings/status/{repo_id}
+   ```
+
+3. 執行語義搜索:
+   ```
+   POST /api/v1/rag/search
+   {
+     "query": "如何使用formatDate函數?",
+     "repo_id": "your-repo-id",
+     "limit": 5
+   }
+   ```
+
+4. 執行RAG查詢(生成回答):
+   ```
+   POST /api/v1/rag/query
+   {
+     "query": "如何使用formatDate函數?",
+     "repo_id": "your-repo-id",
+     "include_code": true,
+     "include_docs": true
+   }
+   ```
+
+5. 刪除倉庫嵌入:
+   ```
+   DELETE /api/v1/rag/embeddings/{repo_id}
+   ```
+
+### 已知限制
+
+- 目前RAG查詢需要配置有效的LLM API密鑰
+- 不支持的文件類型 (yaml, markdown, html) 將被跳過
+- 大型代碼庫的嵌入生成可能需要較長時間

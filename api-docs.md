@@ -25,6 +25,7 @@
     - [同步操作](#同步操作)
 13. [代码文件管理](#代码文件管理)
 14. [文档管理](#文档管理)
+15. [RAG系统](#rag系统)
 
 ## 基礎 URL
 
@@ -2956,3 +2957,172 @@ POST /docs/{repo_id}/generate
   "message": "Document generated successfully"
 }
 ```
+
+## RAG系统
+
+RAG (Retrieval-Augmented Generation) 系统提供了基于代码库和文档的语义搜索和智能问答功能。
+
+### 嵌入管理
+
+#### 生成倉庫嵌入
+
+```
+POST /rag/embeddings/generate/{repo_id}
+```
+
+路徑參數:
+- `repo_id`: 代碼倉庫ID
+
+請求體:
+```json
+{
+  "repo_id": "681fc803c46e9e8569687ff6",
+  "force_regenerate": false
+}
+```
+
+響應:
+```json
+{
+  "success": true,
+  "message": "Embedding generation started",
+  "status": "processing"
+}
+```
+
+#### 獲取嵌入狀態
+
+```
+GET /rag/embeddings/status/{repo_id}
+```
+
+路徑參數:
+- `repo_id`: 代碼倉庫ID
+
+響應:
+```json
+{
+  "repository_id": "681fc803c46e9e8569687ff6",
+  "status": "completed",
+  "code_progress": 1.0,
+  "docs_progress": 1.0,
+  "last_updated": "2023-10-23T15:45:30.123Z",
+  "total_code_files": 42,
+  "processed_code_files": 42,
+  "total_docs": 5,
+  "processed_docs": 5
+}
+```
+
+#### 刪除倉庫嵌入
+
+```
+DELETE /rag/embeddings/{repo_id}
+```
+
+路徑參數:
+- `repo_id`: 代碼倉庫ID
+
+響應:
+```json
+{
+  "success": true,
+  "message": "Embeddings deleted"
+}
+```
+
+### 搜索與查詢
+
+#### 语义搜索
+
+```
+POST /rag/search
+```
+
+請求體:
+```json
+{
+  "query": "如何使用formatDate函數?",
+  "repo_id": "681fc803c46e9e8569687ff6",
+  "collection": "both",
+  "limit": 5,
+  "file_types": ["python", "javascript"]
+}
+```
+
+參數說明:
+- `query`: 搜索查詢文本
+- `repo_id`: 代碼倉庫ID
+- `collection`: 搜索範圍，可選值: "code", "docs", "both" (默認)
+- `limit`: 返回結果數量限制
+- `file_types`: 可選的文件類型過濾器
+
+響應:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "file_id": "60c72b2f9b1a8d001f3a0a1e",
+      "file_path": "utils/date_helpers.js",
+      "file_name": "date_helpers.js",
+      "content": "function formatDate(date, format = 'YYYY-MM-DD') {\n  // Implementation\n}",
+      "language": "javascript",
+      "score": 0.92,
+      "type": "code",
+      "metadata": {
+        "repo_id": "681fc803c46e9e8569687ff6",
+        "file_id": "60c72b2f9b1a8d001f3a0a1e",
+        "language": "javascript",
+        "chunk_index": 3,
+        "total_chunks": 12
+      }
+    }
+  ],
+  "count": 1,
+  "query": "如何使用formatDate函數?"
+}
+```
+
+#### RAG查詢(LLM回答)
+
+```
+POST /rag/query
+```
+
+請求體:
+```json
+{
+  "query": "如何使用formatDate函數?",
+  "repo_id": "681fc803c46e9e8569687ff6",
+  "context_limit": 3,
+  "include_code": true,
+  "include_docs": true
+}
+```
+
+參數說明:
+- `query`: 問題或查詢文本
+- `repo_id`: 代碼倉庫ID
+- `context_limit`: 用於上下文的檢索結果數量
+- `include_code`: 是否包含代碼文件
+- `include_docs`: 是否包含文檔
+
+響應:
+```json
+{
+  "success": true,
+  "answer": "formatDate函數用於將日期格式化為指定的字符串格式。它接受兩個參數：date（日期對象）和format（可選的格式字符串，默認為'YYYY-MM-DD'）。\n\n使用示例：\n```javascript\n// 格式化當前日期為 YYYY-MM-DD\nconst today = formatDate(new Date()); // 返回如 '2023-10-23'\n\n// 使用自定義格式\nconst formattedDate = formatDate(new Date(), 'MM/DD/YYYY'); // 返回如 '10/23/2023'\n```\n\n該函數位於utils/date_helpers.js文件中。",
+  "sources": [
+    {
+      "file_path": "utils/date_helpers.js",
+      "file_name": "date_helpers.js",
+      "language": "javascript",
+      "score": 0.92
+    }
+  ],
+  "query": "如何使用formatDate函數?"
+}
+```
+
+注意: RAG查詢功能需要配置有效的LLM API密鑰才能使用。
