@@ -2,6 +2,8 @@ import os
 from typing import Dict, Any, List, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+import secrets
+from cryptography.fernet import Fernet
 
 class Settings(BaseSettings):
     # 應用程式基本配置
@@ -41,6 +43,9 @@ class Settings(BaseSettings):
     # 安全配置 (為未來的認證模塊預留)
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here-for-jwt-tokens")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 小時
+    
+    # Git凭证加密密钥
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "zULrahkKOCpvWbhfr-PNc_jMTJYqXEucc_Nw85GNjfk=")  # 固定默认密钥，仅用于开发环境
     
     @field_validator("UPLOAD_DIR")
     def create_upload_dir_if_not_exists(cls, v):

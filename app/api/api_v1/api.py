@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import users, projects, tasks, comments, sprints, boards, attachments, search, tags, events, activity_logs, relationships, notifications
+from app.api.api_v1.endpoints import users, projects, tasks, comments, sprints, boards, attachments, search, tags, events, activity_logs, relationships, notifications, git, code, docs
 
 api_router = APIRouter()
 
@@ -30,3 +30,12 @@ api_router.include_router(activity_logs.router, prefix="/activity_logs", tags=["
 api_router.include_router(relationships.router, prefix="/relationships", tags=["relationships"])
 # 通知相關路由
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+
+# 添加Git仓库管理路由
+api_router.include_router(git.router, prefix="/git", tags=["git"])
+
+# 添加代码文件路由
+api_router.include_router(code.router, prefix="/code", tags=["code"])
+
+# 添加文档路由
+api_router.include_router(docs.router, prefix="/docs", tags=["docs"])

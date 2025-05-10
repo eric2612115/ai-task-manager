@@ -1,18 +1,25 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import IndexModel, ASCENDING, DESCENDING, TEXT
 from pymongo.errors import ServerSelectionTimeoutError
+from typing import Optional
+import asyncio
+import logging
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 class Database:
-    client: AsyncIOMotorClient = None
+    client: Optional[AsyncIOMotorClient] = None
     db = None
     
     async def connect_to_mongodb(self):
         """建立與MongoDB的連接"""
+        logger.info("Connecting to MongoDB...")
         try:
             self.client = AsyncIOMotorClient(settings.MONGODB_URL)
             self.db = self.client[settings.MONGODB_DB_NAME]
+            
             # 嘗試與MongoDB通信以確保連接成功
             await self.client.admin.command('ping')
             print("Successfully connected to MongoDB")
@@ -20,6 +27,7 @@ class Database:
             # 初始化集合和索引
             await self.init_collections()
             
+            logger.info("Connected to MongoDB successfully")
         except ServerSelectionTimeoutError:
             print("Could not connect to MongoDB")
             raise
@@ -27,6 +35,7 @@ class Database:
     async def close_mongodb_connection(self):
         """關閉MongoDB連接"""
         if self.client is not None:
+            logger.info("Closing MongoDB connection...")
             self.client.close()
             print("MongoDB connection closed")
     
@@ -54,6 +63,12 @@ class Database:
         await self.init_relationships_collection()
         # 初始化標籤集合
         await self.init_tags_collection()
+        # 初始化Git相关集合
+        await self.init_git_collections()
+        # 初始化代码文件集合
+        await self.init_code_collections()
+        # 初始化文档集合
+        await self.init_doc_collections()
     
     async def init_users_collection(self):
         """初始化用戶集合和索引"""
@@ -172,6 +187,101 @@ class Database:
         ]
         
         await self.db.tags.create_indexes(tags_indexes)
+
+    async def init_git_collections(self):
+        """初始化Git相关集合和索引"""
+        # Git凭证索引
+        git_credentials_indexes = [
+            IndexModel([("name", ASCENDING)]),
+            IndexModel([("platform", ASCENDING)]),
+            IndexModel([("status", ASCENDING)]),
+            IndexModel([("last_validated", DESCENDING)])
+        ]
+        
+        await self.db.git_credentials.create_indexes(git_credentials_indexes)
+        
+        # 仓库索引
+        repositories_indexes = [
+            IndexModel([("credential_id", ASCENDING)]),
+            IndexModel([("platform", ASCENDING)]),
+            IndexModel([("full_name", ASCENDING), ("platform", ASCENDING)], unique=True),
+            IndexModel([("sync_status", ASCENDING)]),
+            IndexModel([("last_synced_at", DESCENDING)])
+        ]
+        
+        await self.db.repositories.create_indexes(repositories_indexes)
+        
+        # 同步历史索引
+        sync_history_indexes = [
+            IndexModel([("repository_id", ASCENDING)]),
+            IndexModel([("started_at", DESCENDING)]),
+            IndexModel([("status", ASCENDING)])
+        ]
+        
+        await self.db.sync_history.create_indexes(sync_history_indexes)
+    
+    async def init_code_collections(self):
+        """初始化代码文件集合和索引"""
+        code_files_indexes = [
+            IndexModel([("repository_id", ASCENDING)]),
+            IndexModel([("repository_id", ASCENDING), ("file_path", ASCENDING)], unique=True),
+            IndexModel([("code_language", ASCENDING)]),
+            IndexModel([("is_deleted", ASCENDING)]),
+            IndexModel([("content", TEXT)], name="content_text_search")
+        ]
+        await self.db.code_files.create_indexes(code_files_indexes)
+        
+        code_file_versions_indexes = [
+            IndexModel([("file_id", ASCENDING)]),
+            IndexModel([("commit_sha", ASCENDING)]),
+            IndexModel([("committed_at", DESCENDING)])
+        ]
+        await self.db.code_file_versions.create_indexes(code_file_versions_indexes)
+    
+    async def init_doc_collections(self):
+        """初始化文档集合和索引"""
+        docs_indexes = [
+            IndexModel([("repository_id", ASCENDING)]),
+            IndexModel([("title", ASCENDING)]),
+            IndexModel([("tags", ASCENDING)]),
+            IndexModel([("is_deleted", ASCENDING)]),
+            IndexModel([("created_at", DESCENDING)]),
+            IndexModel([("updated_at", DESCENDING)]),
+            IndexModel([("title", TEXT), ("content", TEXT)], name="doc_text_search")
+        ]
+        await self.db.project_documentations.create_indexes(docs_indexes)
+        
+        doc_versions_indexes = [
+            IndexModel([("doc_id", ASCENDING)]),
+            IndexModel([("version_number", ASCENDING)]),
+            IndexModel([("created_at", DESCENDING)])
+        ]
+        await self.db.documentation_versions.create_indexes(doc_versions_indexes)
+
+    async def _create_indexes(self):
+        """创建数据库索引"""
+        try:
+            # git_credentials 索引
+            await self.db.git_credentials.create_index([("name", 1)], unique=True)
+            await self.db.git_credentials.create_index([("status", 1)])
+            await self.db.git_credentials.create_index([("platform", 1)])
+            
+            # repositories 索引
+            await self.db.repositories.create_index([("full_name", 1), ("platform", 1)], unique=True)
+            await self.db.repositories.create_index([("credential_id", 1)])
+            await self.db.repositories.create_index([("sync_status", 1)])
+            
+            # code_files 索引
+            await self.db.code_files.create_index([("repository_id", 1), ("file_path", 1)], unique=True)
+            await self.db.code_files.create_index([("repository_id", 1), ("is_deleted", 1)])
+            
+            # sync_history 索引
+            await self.db.sync_history.create_index([("repository_id", 1), ("started_at", -1)])
+            
+            logger.info("MongoDB indexes created successfully")
+        except Exception as e:
+            logger.error(f"Error creating MongoDB indexes: {e}")
+            # 不抛出异常，允许应用继续启动
 
 # 創建單例數據庫連接
 mongodb = Database()

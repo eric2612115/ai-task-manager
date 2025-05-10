@@ -19,6 +19,12 @@
 9. [關係管理](#關係管理)
 10. [活動日誌](#活動日誌)
 11. [通知管理](#通知管理)
+12. [Git倉庫管理](#git倉庫管理)
+    - [凭证管理](#凭证管理) 
+    - [仓库管理](#仓库管理)
+    - [同步操作](#同步操作)
+13. [代码文件管理](#代码文件管理)
+14. [文档管理](#文档管理)
 
 ## 基礎 URL
 
@@ -709,41 +715,49 @@ PUT /tasks/{task_id}
 請求體：
 ```json
 {
-  "summary": "修復登入頁面的驗證 bug",
-  "description": "更新的描述",
+  "summary": "更新後的任務摘要",
+  "description": "更新後的任務描述",
   "status": "In Progress",
-  "priority": "Critical",
-  "assignee_id": "507f1f77bcf86cd799439012",
-  "due_date": "2023-02-15T00:00:00Z",
-  "sprint_id": "60c72b2f9b1a8d001f3a0a26",
-  "tags": ["bug", "login", "validation"]
+  "priority": "High",
+  "task_type": "Bug",
+  "assignee_id": "507f1f77bcf86cd799439011",
+  "due_date": "2023-05-31T23:59:59Z",
+  "sprint_id": "507f1f77bcf86cd799439020",
+  "tags": ["前端", "緊急"]
 }
 ```
 
-注意：所有字段都是可選的，只有提供的字段才會被更新。
+**注意**：
+1. 所有字段都是可選的，只有提供的字段才會被更新。
+2. 狀態更新必須遵循專案設置中定義的工作流規則。例如，只能從"Open"變更為"In Progress"，而不能直接從"Open"變更為"Closed"。
+3. 狀態名稱必須完全匹配專案中定義的狀態值，不能包含額外字符（如"In Progress-column"是無效的）。
+
+響應HTTP狀態碼：
+- `200`: 更新成功
+- `400`: 如果狀態轉換違反了工作流規則
+- `404`: 任務未找到
+- `409`: 任務已被其他用戶修改（版本衝突）
 
 響應：
 ```json
 {
-  "id": "60c72b2f9b1a8d001f3a0a1e",
-  "project_id": "60c72b2f9b1a8d001f3a0a1d",
-  "summary": "修復登入頁面的驗證 bug",
-  "description": "更新的描述",
+  "id": "507f1f77bcf86cd799439013",
+  "project_id": "507f1f77bcf86cd799439012",
+  "summary": "更新後的任務摘要",
+  "description": "更新後的任務描述",
   "status": "In Progress",
-  "priority": "Critical",
+  "priority": "High",
   "task_type": "Bug",
-  "assignee_id": "507f1f77bcf86cd799439012",
-  "reporter_id": "507f1f77bcf86cd799439011",
-  "due_date": "2023-02-15T00:00:00Z",
-  "sprint_id": "60c72b2f9b1a8d001f3a0a26",
-  "board_column_id": "60c72b2f9b1a8d001f3a0a2a",
-  "order_in_column": 1.0,
-  "mermaid_syntax": null,
-  "tags": ["bug", "login", "validation"],
-  "attachments": [],
-  "created_at": "2023-01-01T12:00:00Z",
-  "updated_at": "2023-01-02T12:00:00Z",
-  "__v": 2
+  "assignee_id": "507f1f77bcf86cd799439011",
+  "reporter_id": "507f1f77bcf86cd799439010",
+  "due_date": "2023-05-31T23:59:59Z",
+  "sprint_id": "507f1f77bcf86cd799439020",
+  "board_column_id": "507f1f77bcf86cd799439030",
+  "order_in_column": 1.5,
+  "tags": ["前端", "緊急"],
+  "attachments": ["507f1f77bcf86cd799439040"],
+  "created_at": "2023-05-01T10:00:00Z",
+  "updated_at": "2023-05-02T15:30:00Z"
 }
 ```
 
@@ -1571,7 +1585,7 @@ GET /activity_logs/projects/{project_id}
       "summary": "修復登入頁面的bug",
       "status": "Open"
     },
-    "timestamp": "2023-01-01T12:00:00Z"
+    "created_at": "2023-01-01T12:00:00Z"
   },
   {
     "id": "60c72b2f9b1a8d001f3a0a26",
@@ -1630,7 +1644,7 @@ GET /activity_logs/users/{user_id}
       "summary": "修復登入頁面的bug",
       "status": "Open"
     },
-    "timestamp": "2023-01-01T12:00:00Z"
+    "created_at": "2023-01-01T12:00:00Z"
   }
 ]
 ```
@@ -1874,5 +1888,1071 @@ GET /health
   "status": "ok",
   "version": "1.0.0",
   "timestamp": "2023-07-12T12:00:00Z"
+}
+```
+
+## Git倉庫管理
+
+### 凭证管理
+
+#### 创建Git凭证
+
+```
+POST /git/credentials
+```
+
+请求体：
+```json
+{
+  "name": "GitHub账号",
+  "platform": "github",
+  "auth_type": "token",
+  "token": "ghp_xxxxxxxxxxxxxxxx",
+  "base_url": null
+}
+```
+
+注意：
+- `platform` 值必须为 "github" 或 "gitlab"
+- `auth_type` 值必须为 "token" 或 "oauth"，默认为 "token"
+- `base_url` 仅对 GitLab 企业版必填，否则可为 null
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "GitHub账号",
+    "platform": "github",
+    "auth_type": "token",
+    "token": "[加密后的token]",
+    "base_url": null,
+    "status": "active",
+    "last_validated": null,
+    "created_at": "2023-05-01T10:00:00Z",
+    "updated_at": "2023-05-01T10:00:00Z"
+  },
+  "message": "Credential created successfully"
+}
+```
+
+#### 获取所有Git凭证
+
+```
+GET /git/credentials
+```
+
+查询参数：
+- `skip` (可选): 分页跳过数量，默认为 0
+- `limit` (可选): 分页限制数量，默认为 100
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "name": "GitHub账号",
+      "platform": "github",
+      "auth_type": "token",
+      "token": "[加密后的token]",
+      "base_url": null,
+      "status": "active",
+      "last_validated": "2023-05-01T10:30:00Z",
+      "created_at": "2023-05-01T10:00:00Z",
+      "updated_at": "2023-05-01T10:30:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### 获取单个Git凭证
+
+```
+GET /git/credentials/{credential_id}
+```
+
+路径参数：
+- `credential_id`: 凭证ID
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "GitHub账号",
+    "platform": "github",
+    "auth_type": "token",
+    "token": "[加密后的token]",
+    "base_url": null,
+    "status": "active",
+    "last_validated": "2023-05-01T10:30:00Z",
+    "created_at": "2023-05-01T10:00:00Z",
+    "updated_at": "2023-05-01T10:30:00Z"
+  }
+}
+```
+
+#### 更新Git凭证
+
+```
+PUT /git/credentials/{credential_id}
+```
+
+路径参数：
+- `credential_id`: 凭证ID
+
+请求体：
+```json
+{
+  "name": "GitHub个人账号",
+  "token": "ghp_yyyyyyyyyyyyyyyy",
+  "base_url": null,
+  "status": "active"
+}
+```
+
+注意：所有字段都是可选的，只有提供的字段才会被更新。
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "GitHub个人账号",
+    "platform": "github",
+    "auth_type": "token",
+    "token": "[加密后的新token]",
+    "base_url": null,
+    "status": "active",
+    "last_validated": null,
+    "created_at": "2023-05-01T10:00:00Z",
+    "updated_at": "2023-05-01T11:00:00Z"
+  },
+  "message": "Credential updated successfully"
+}
+```
+
+#### 删除Git凭证
+
+```
+DELETE /git/credentials/{credential_id}
+```
+
+路径参数：
+- `credential_id`: 凭证ID
+
+响应：
+```json
+{
+  "success": true,
+  "message": "Credential deleted successfully"
+}
+```
+
+#### 测试Git凭证连接
+
+```
+POST /git/credentials/{credential_id}/test
+```
+
+路径参数：
+- `credential_id`: 凭证ID
+
+响应：
+```json
+{
+  "success": true,
+  "connected": true,
+  "message": "Connection successful"
+}
+```
+
+#### 测试Git令牌有效性
+
+```
+POST /git/credentials/test-token
+```
+
+请求体：
+```json
+{
+  "platform": "github",
+  "token": "ghp_xxxxxxxxxxxxxxxx",
+  "base_url": null
+}
+```
+
+注意：
+- `platform` 值必须为 "github" 或 "gitlab"
+- `base_url` 仅对 GitLab 企业版必填，否则可为 null
+- 此API无需先创建凭证，可直接测试token有效性
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "valid": true,
+    "message": "Connection successful",
+    "user_info": {
+      "username": "your-username",
+      "name": "Your Name",
+      "email": "your.email@example.com",
+      "avatar_url": "https://avatars.githubusercontent.com/u/12345678"
+    }
+  }
+}
+```
+
+### 仓库管理
+
+#### 发现可访问的仓库
+
+```
+GET /git/repos/discover
+```
+
+查询参数：
+- `credential_id` (必填): 凭证ID
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "platform": "github",
+      "owner": "username",
+      "name": "repo-name",
+      "full_name": "username/repo-name",
+      "default_branch": "main",
+      "description": "项目描述",
+      "is_private": false,
+      "exists": false
+    },
+    {
+      "platform": "github",
+      "owner": "username",
+      "name": "another-repo",
+      "full_name": "username/another-repo",
+      "default_branch": "master",
+      "description": "另一个项目描述",
+      "is_private": true,
+      "exists": true,
+      "id": "507f1f77bcf86cd799439012"
+    }
+  ],
+  "count": 2
+}
+```
+
+#### 创建仓库记录
+
+```
+POST /git/repos
+```
+
+请求体：
+```json
+{
+  "credential_id": "507f1f77bcf86cd799439011",
+  "platform": "github",
+  "owner": "username",
+  "name": "repo-name",
+  "full_name": "username/repo-name",
+  "default_branch": "main",
+  "description": "项目描述",
+  "is_private": false,
+  "sync_branches": ["main", "develop"]
+}
+```
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439012",
+    "credential_id": "507f1f77bcf86cd799439011",
+    "platform": "github",
+    "owner": "username",
+    "name": "repo-name",
+    "full_name": "username/repo-name",
+    "default_branch": "main",
+    "description": "项目描述",
+    "is_private": false,
+    "sync_enabled": true,
+    "sync_branches": ["main", "develop"],
+    "sync_status": "pending",
+    "created_at": "2023-05-01T12:00:00Z",
+    "updated_at": "2023-05-01T12:00:00Z"
+  },
+  "message": "Repository created successfully"
+}
+```
+
+#### 获取所有仓库
+
+```
+GET /git/repos
+```
+
+查询参数：
+- `skip` (可选): 分页跳过数量，默认为 0
+- `limit` (可选): 分页限制数量，默认为 100
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439012",
+      "credential_id": "507f1f77bcf86cd799439011",
+      "platform": "github",
+      "owner": "username",
+      "name": "repo-name",
+      "full_name": "username/repo-name",
+      "default_branch": "main",
+      "description": "项目描述",
+      "is_private": false,
+      "sync_enabled": true,
+      "sync_branches": ["main", "develop"],
+      "sync_status": "completed",
+      "last_synced_at": "2023-05-01T12:30:00Z",
+      "last_commit_sha": "abcdef1234567890",
+      "created_at": "2023-05-01T12:00:00Z",
+      "updated_at": "2023-05-01T12:30:00Z",
+      "credential": {
+        "id": "507f1f77bcf86cd799439011",
+        "name": "GitHub个人账号",
+        "platform": "github",
+        "status": "active"
+      }
+    }
+  ],
+  "count": 1
+}
+```
+
+#### 获取单个仓库
+
+```
+GET /git/repos/{repo_id}
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439012",
+    "credential_id": "507f1f77bcf86cd799439011",
+    "platform": "github",
+    "owner": "username",
+    "name": "repo-name",
+    "full_name": "username/repo-name",
+    "default_branch": "main",
+    "description": "项目描述",
+    "is_private": false,
+    "sync_enabled": true,
+    "sync_branches": ["main", "develop"],
+    "sync_status": "completed",
+    "last_synced_at": "2023-05-01T12:30:00Z",
+    "last_commit_sha": "abcdef1234567890",
+    "created_at": "2023-05-01T12:00:00Z",
+    "updated_at": "2023-05-01T12:30:00Z",
+    "credential": {
+      "id": "507f1f77bcf86cd799439011",
+      "name": "GitHub个人账号",
+      "platform": "github",
+      "status": "active"
+    }
+  }
+}
+```
+
+#### 更新仓库
+
+```
+PUT /git/repos/{repo_id}
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+请求体：
+```json
+{
+  "default_branch": "master",
+  "sync_enabled": true,
+  "sync_branches": ["master", "develop", "feature/*"],
+  "description": "更新的项目描述"
+}
+```
+
+注意：所有字段都是可选的，只有提供的字段才会被更新。
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439012",
+    "credential_id": "507f1f77bcf86cd799439011",
+    "platform": "github",
+    "owner": "username",
+    "name": "repo-name",
+    "full_name": "username/repo-name",
+    "default_branch": "master",
+    "description": "更新的项目描述",
+    "is_private": false,
+    "sync_enabled": true,
+    "sync_branches": ["master", "develop", "feature/*"],
+    "sync_status": "completed",
+    "last_synced_at": "2023-05-01T12:30:00Z",
+    "last_commit_sha": "abcdef1234567890",
+    "created_at": "2023-05-01T12:00:00Z",
+    "updated_at": "2023-05-01T13:00:00Z"
+  },
+  "message": "Repository updated successfully"
+}
+```
+
+#### 删除仓库
+
+```
+DELETE /git/repos/{repo_id}
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+响应：
+```json
+{
+  "success": true,
+  "message": "Repository deleted successfully"
+}
+```
+
+### 同步操作
+
+#### 同步仓库
+
+```
+POST /git/repos/{repo_id}/sync
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+查询参数：
+- `sync_type` (可选): 同步类型，可以是 "full" 或 "incremental"，默认为 "full"
+
+响应：
+```json
+{
+  "success": true,
+  "message": "Repository synchronization (full) started",
+  "sync_status": "syncing"
+}
+```
+
+#### 获取仓库同步状态
+
+```
+GET /git/repos/{repo_id}/sync/status
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "sync_status": "completed",
+    "last_synced_at": "2023-05-01T13:30:00Z",
+    "latest_sync": {
+      "_id": "507f1f77bcf86cd799439013",
+      "repository_id": "507f1f77bcf86cd799439012",
+      "sync_type": "full",
+      "started_at": "2023-05-01T13:00:00Z",
+      "completed_at": "2023-05-01T13:30:00Z",
+      "status": "completed",
+      "files_processed": 120,
+      "files_added": 120,
+      "files_updated": 0,
+      "files_deleted": 0,
+      "to_commit": "abcdef1234567890"
+    }
+  }
+}
+```
+
+#### 获取仓库同步历史
+
+```
+GET /git/repos/{repo_id}/sync/history
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+查询参数：
+- `skip` (可选): 分页跳过数量，默认为 0
+- `limit` (可选): 分页限制数量，默认为 10
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439014",
+      "repository_id": "507f1f77bcf86cd799439012",
+      "sync_type": "incremental",
+      "started_at": "2023-05-02T10:00:00Z",
+      "completed_at": "2023-05-02T10:05:00Z",
+      "status": "completed",
+      "from_commit": "abcdef1234567890",
+      "to_commit": "fedcba0987654321",
+      "files_processed": 5,
+      "files_added": 2,
+      "files_updated": 3,
+      "files_deleted": 0
+    },
+    {
+      "_id": "507f1f77bcf86cd799439013",
+      "repository_id": "507f1f77bcf86cd799439012",
+      "sync_type": "full",
+      "started_at": "2023-05-01T13:00:00Z",
+      "completed_at": "2023-05-01T13:30:00Z",
+      "status": "completed",
+      "files_processed": 120,
+      "files_added": 120,
+      "files_updated": 0,
+      "files_deleted": 0,
+      "to_commit": "abcdef1234567890"
+    }
+  ],
+  "count": 2
+}
+```
+
+## 代码文件管理
+
+#### 获取仓库文件树结构
+
+```
+GET /code/repos/{repo_id}/tree
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+查询参数：
+- `include_deleted` (可选): 是否包含已删除的文件，默认为 false
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "name": "src",
+      "path": "src",
+      "type": "directory",
+      "children": [
+        {
+          "id": "507f1f77bcf86cd799439015",
+          "name": "main.js",
+          "path": "src/main.js",
+          "type": "file",
+          "language": "javascript",
+          "size": 1024,
+          "is_deleted": false
+        }
+      ]
+    },
+    {
+      "name": "README.md",
+      "path": "README.md",
+      "type": "file",
+      "language": "markdown",
+      "size": 512,
+      "is_deleted": false
+    }
+  ]
+}
+```
+
+#### 获取文件内容
+
+```
+GET /code/files/{file_id}
+```
+
+路径参数：
+- `file_id`: 文件ID
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439015",
+    "repository_id": "507f1f77bcf86cd799439012",
+    "file_path": "src/main.js",
+    "file_name": "main.js",
+    "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n",
+    "language": "javascript",
+    "size_bytes": 1024,
+    "line_count": 5,
+    "commit_sha": "fedcba0987654321",
+    "branch": "main",
+    "last_modified": "2023-05-02T10:05:00Z",
+    "author": "username",
+    "is_deleted": false,
+    "created_at": "2023-05-01T13:30:00Z",
+    "updated_at": "2023-05-02T10:05:00Z"
+  }
+}
+```
+
+#### 根据路径获取文件
+
+```
+GET /code/repos/{repo_id}/files
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+查询参数：
+- `path` (必填): 文件路径，相对于仓库根目录
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439015",
+    "repository_id": "507f1f77bcf86cd799439012",
+    "file_path": "src/main.js",
+    "file_name": "main.js",
+    "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n",
+    "language": "javascript",
+    "size_bytes": 1024,
+    "line_count": 5,
+    "commit_sha": "fedcba0987654321",
+    "branch": "main",
+    "last_modified": "2023-05-02T10:05:00Z",
+    "author": "username",
+    "is_deleted": false,
+    "created_at": "2023-05-01T13:30:00Z",
+    "updated_at": "2023-05-02T10:05:00Z"
+  }
+}
+```
+
+#### 获取文件版本历史
+
+```
+GET /code/files/{file_id}/versions
+```
+
+路径参数：
+- `file_id`: 文件ID
+
+查询参数：
+- `skip` (可选): 分页跳过数量，默认为 0
+- `limit` (可选): 分页限制数量，默认为 10
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439017",
+      "file_id": "507f1f77bcf86cd799439015",
+      "commit_sha": "fedcba0987654321",
+      "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n",
+      "diff": "@@ -1,4 +1,5 @@\n console.log('Hello, world!');\n \n function sayHello() {\n+  return 'Hello!';\n }\n",
+      "author": "username",
+      "commit_message": "Add return statement to sayHello function",
+      "committed_at": "2023-05-02T10:05:00Z",
+      "created_at": "2023-05-02T10:05:00Z"
+    },
+    {
+      "_id": "507f1f77bcf86cd799439016",
+      "file_id": "507f1f77bcf86cd799439015",
+      "commit_sha": "abcdef1234567890",
+      "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n}\n",
+      "diff": null,
+      "author": "username",
+      "commit_message": "Initial commit",
+      "committed_at": "2023-05-01T13:30:00Z",
+      "created_at": "2023-05-01T13:30:00Z"
+    }
+  ],
+  "count": 2
+}
+```
+
+#### 搜索代码内容
+
+```
+POST /code/search
+```
+
+请求体：
+```json
+{
+  "repository_id": "507f1f77bcf86cd799439012",
+  "query": "function sayHello",
+  "file_extensions": [".js", ".ts"],
+  "limit": 50,
+  "skip": 0
+}
+```
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439015",
+      "file_path": "src/main.js",
+      "file_name": "main.js",
+      "language": "javascript",
+      "matches": [
+        {
+          "start_line": 1,
+          "end_line": 5,
+          "match_line": 3,
+          "context": [
+            {
+              "line_number": 1,
+              "content": "console.log('Hello, world!');",
+              "is_match": false
+            },
+            {
+              "line_number": 2,
+              "content": "",
+              "is_match": false
+            },
+            {
+              "line_number": 3,
+              "content": "function sayHello() {",
+              "is_match": true
+            },
+            {
+              "line_number": 4,
+              "content": "  return 'Hello!';",
+              "is_match": false
+            },
+            {
+              "line_number": 5,
+              "content": "}",
+              "is_match": false
+            }
+          ]
+        }
+      ],
+      "score": 0.95
+    }
+  ],
+  "count": 1
+}
+```
+
+## 文档管理
+
+#### 创建文档
+
+```
+POST /docs
+```
+
+请求体：
+```json
+{
+  "repository_id": "507f1f77bcf86cd799439012",
+  "title": "项目文档",
+  "content": "# 项目文档\n\n这是一个示例文档。",
+  "path": "docs/README.md",
+  "tags": ["文档", "说明"]
+}
+```
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439018",
+    "repository_id": "507f1f77bcf86cd799439012",
+    "title": "项目文档",
+    "content": "# 项目文档\n\n这是一个示例文档。",
+    "path": "docs/README.md",
+    "tags": ["文档", "说明"],
+    "author_id": null,
+    "last_modified_by": null,
+    "is_deleted": false,
+    "created_at": "2023-05-03T10:00:00Z",
+    "updated_at": "2023-05-03T10:00:00Z"
+  },
+  "message": "Document created successfully"
+}
+```
+
+#### 获取文档列表
+
+```
+GET /docs
+```
+
+查询参数：
+- `repo_id` (可选): 仓库ID，用于筛选特定仓库的文档
+- `skip` (可选): 分页跳过数量，默认为 0
+- `limit` (可选): 分页限制数量，默认为 100
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439018",
+      "repository_id": "507f1f77bcf86cd799439012",
+      "title": "项目文档",
+      "content": "# 项目文档\n\n这是一个示例文档。",
+      "path": "docs/README.md",
+      "tags": ["文档", "说明"],
+      "author_id": null,
+      "last_modified_by": null,
+      "is_deleted": false,
+      "created_at": "2023-05-03T10:00:00Z",
+      "updated_at": "2023-05-03T10:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### 获取单个文档
+
+```
+GET /docs/{doc_id}
+```
+
+路径参数：
+- `doc_id`: 文档ID
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439018",
+    "repository_id": "507f1f77bcf86cd799439012",
+    "title": "项目文档",
+    "content": "# 项目文档\n\n这是一个示例文档。",
+    "path": "docs/README.md",
+    "tags": ["文档", "说明"],
+    "author_id": null,
+    "last_modified_by": null,
+    "is_deleted": false,
+    "created_at": "2023-05-03T10:00:00Z",
+    "updated_at": "2023-05-03T10:00:00Z"
+  }
+}
+```
+
+#### 更新文档
+
+```
+PUT /docs/{doc_id}
+```
+
+路径参数：
+- `doc_id`: 文档ID
+
+查询参数：
+- `user_id` (可选): 更新用户ID
+
+请求体：
+```json
+{
+  "title": "更新的项目文档",
+  "content": "# 更新的项目文档\n\n这是一个更新后的示例文档。",
+  "path": "docs/README.md",
+  "tags": ["文档", "说明", "更新"],
+  "change_summary": "更新文档标题和内容"
+}
+```
+
+注意：所有字段都是可选的，只有提供的字段才会被更新。
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439018",
+    "repository_id": "507f1f77bcf86cd799439012",
+    "title": "更新的项目文档",
+    "content": "# 更新的项目文档\n\n这是一个更新后的示例文档。",
+    "path": "docs/README.md",
+    "tags": ["文档", "说明", "更新"],
+    "author_id": null,
+    "last_modified_by": "507f1f77bcf86cd799439011",
+    "is_deleted": false,
+    "created_at": "2023-05-03T10:00:00Z",
+    "updated_at": "2023-05-03T11:00:00Z"
+  },
+  "message": "Document updated successfully"
+}
+```
+
+#### 删除文档
+
+```
+DELETE /docs/{doc_id}
+```
+
+路径参数：
+- `doc_id`: 文档ID
+
+响应：
+```json
+{
+  "success": true,
+  "message": "Document deleted successfully"
+}
+```
+
+#### 获取文档版本历史
+
+```
+GET /docs/{doc_id}/versions
+```
+
+路径参数：
+- `doc_id`: 文档ID
+
+查询参数：
+- `skip` (可选): 分页跳过数量，默认为 0
+- `limit` (可选): 分页限制数量，默认为 20
+
+响应：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439020",
+      "doc_id": "507f1f77bcf86cd799439018",
+      "title": "更新的项目文档",
+      "content": "# 更新的项目文档\n\n这是一个更新后的示例文档。",
+      "edited_by": "507f1f77bcf86cd799439011",
+      "version_number": 2,
+      "change_summary": "更新文档标题和内容",
+      "created_at": "2023-05-03T11:00:00Z"
+    },
+    {
+      "_id": "507f1f77bcf86cd799439019",
+      "doc_id": "507f1f77bcf86cd799439018",
+      "title": "项目文档",
+      "content": "# 项目文档\n\n这是一个示例文档。",
+      "edited_by": null,
+      "version_number": 1,
+      "change_summary": null,
+      "created_at": "2023-05-03T10:00:00Z"
+    }
+  ],
+  "count": 2
+}
+```
+
+#### 获取指定版本的文档
+
+```
+GET /docs/{doc_id}/versions/{version_number}
+```
+
+路径参数：
+- `doc_id`: 文档ID
+- `version_number`: 版本号
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439019",
+    "doc_id": "507f1f77bcf86cd799439018",
+    "title": "项目文档",
+    "content": "# 项目文档\n\n这是一个示例文档。",
+    "edited_by": null,
+    "version_number": 1,
+    "change_summary": null,
+    "created_at": "2023-05-03T10:00:00Z"
+  }
+}
+```
+
+#### 生成文档
+
+```
+POST /docs/{repo_id}/generate
+```
+
+路径参数：
+- `repo_id`: 仓库ID
+
+请求体：
+```json
+{
+  "source_files": ["src/main.js", "README.md"],
+  "title": "API文档",
+  "target_format": "markdown",
+  "include_code": true,
+  "doc_type": "technical"
+}
+```
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439021",
+    "repository_id": "507f1f77bcf86cd799439012",
+    "title": "API文档",
+    "content": "# Generated Documentation\n\n## src/main.js\n\n**Language**: javascript\n\n```\nconsole.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n```\n\n## README.md\n\n**Language**: markdown\n\n```\n# Example Project\n\nThis is an example project.\n```\n",
+    "path": null,
+    "tags": ["auto-generated", "technical"],
+    "author_id": null,
+    "last_modified_by": null,
+    "is_deleted": false,
+    "created_at": "2023-05-03T12:00:00Z",
+    "updated_at": "2023-05-03T12:00:00Z"
+  },
+  "message": "Document generated successfully"
 }
 ```

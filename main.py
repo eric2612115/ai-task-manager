@@ -4,11 +4,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from fastapi.encoders import jsonable_encoder
+import json
 
 from app.core.config import settings
 from app.db.mongodb import mongodb
 from app.db.redis import redis_manager
 from app.api.api_v1.api import api_router
+from app.core.custom_json import CustomJSONEncoder
 
 # 初始化環境或建立連接
 @asynccontextmanager
@@ -41,13 +44,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Error during shutdown: {e}")
 
+# 创建自定义JSONResponse类，使用我们的CustomJSONEncoder
+class CustomJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            cls=CustomJSONEncoder,
+        ).encode("utf-8")
+
 # 創建FastAPI應用
 app = FastAPI(
     title=settings.APP_NAME,
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
     docs_url=f"{settings.API_V1_PREFIX}/docs",
     redoc_url=f"{settings.API_V1_PREFIX}/redoc",
-    lifespan=lifespan
+    lifespan=lifespan,
+    default_response_class=CustomJSONResponse
 )
 
 # 添加CORS中間件

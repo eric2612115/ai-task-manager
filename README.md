@@ -1,159 +1,132 @@
-# 任務管理系統 API 服務
+# 任务管理系统 (Task Management System)
 
-這是一個基於 FastAPI、MongoDB 和 Redis 構建的任務管理系統後端 API 服務。
+基于FastAPI的任务管理系统后端，提供项目、任务、看板、冲刺等敏捷开发工具功能，同时支持GitHub和GitLab代码仓库的集成与管理。
 
-## 功能特性
+## 系统概述
 
-- **專案管理**: 創建和管理多個專案
-- **任務管理**: 詳細的任務跟踪，包括狀態、優先級、指派人等
-- **衝刺管理**: 創建衝刺並將任務分配到衝刺
-- **看板視圖**: 通過看板列和順序來管理任務
-- **評論系統**: 在任務上添加和管理評論
-- **附件支持**: 為任務和評論添加附件
-- **標籤系統**: 為任務添加標籤以便分類和過濾
-- **任務關係**: 建立任務之間的關係（阻擋、關聯、父子等）
-- **工作流程**: 基於專案配置的任務狀態轉換規則
-- **活動日誌**: 詳細記錄系統中的變更
-- **通知系統**: 基於事件的應用內通知
-- **全文搜索**: 搜索不同實體類型的內容
-- **實時更新**: 通過 Server-Sent Events (SSE) 推送實時更新
+这是一个强大的任务管理系统后端，结合了两大核心功能：
+1. **敏捷项目管理**：全功能敏捷开发工具，支持任务跟踪、看板、冲刺规划等
+2. **Git代码仓库管理**：支持GitHub和GitLab集成，代码同步与浏览
 
-## 技術棧
+该系统适用于需要将代码管理与任务管理紧密结合的开发团队，提供API端点供前端应用调用。
 
-- **Python 3.13**: 核心編程語言
-- **FastAPI**: Web 框架
-- **Uvicorn**: ASGI 服務器
-- **MongoDB**: 使用 Motor 非同步驅動訪問的文檔數據庫
-- **Redis**: 用於 Pub/Sub 的消息代理
-- **Pydantic**: 數據驗證和設置管理
-- **Server-Sent Events (SSE)**: 實時事件推送
+## 核心功能
 
-## 安裝與運行
+### 敏捷项目管理
+- **项目管理**：创建、配置及管理多个项目
+- **任务跟踪**：创建、分配、更新和监控任务
+- **看板功能**：拖放式任务管理界面
+- **冲刺规划**：规划和跟踪开发冲刺
+- **用户管理**：用户账户、权限和团队协作
+- **评论系统**：在任务上添加讨论和评论
+- **通知系统**：关键事件的实时通知
+- **附件支持**：向任务添加文件附件
+- **标签管理**：组织和分类任务
+- **活动日志**：记录系统中的所有活动
 
-### 兼容性說明
+### Git代码仓库管理
+- **Git凭证管理**：支持GitHub和GitLab平台
+- **代码仓库集成**：自动发现和同步仓库
+- **代码浏览**：浏览仓库文件和内容
+- **文档管理**：基于源代码生成和管理文档
 
-本項目建議使用 Python 3.10-3.12 版本。Python 3.13 目前部分依賴庫可能存在兼容性問題。
+## 技术栈
 
-### 前提條件
+- **Web框架**：FastAPI
+- **数据库**：MongoDB（使用Motor作为异步驱动）
+- **缓存与消息**：Redis
+- **异步支持**：asyncio, aiohttp
+- **身份验证**：JWT, OAuth
+- **加密**：cryptography, bcrypt
+- **文档**：Markdown, OpenAPI
 
-- Python 3.13+
-- MongoDB 8.0+
-- Redis
+## 安装与配置
 
-### 步驟
-
-1. 克隆倉庫:
-   ```
-   git clone <repository-url>
-   cd task-manager-server
-   ```
-
-2. 創建虛擬環境並安裝依賴:
-   ```
-   python -m venv .venv
-   source .venv/bin/activate  # Windows 上使用 .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. 配置環境變量 (可選):
-   創建 `.env` 文件:
-   ```
-   MONGODB_URL=mongodb://localhost:27017
-   MONGODB_DB_NAME=task_manager_db
-   REDIS_URL=redis://localhost:6379/0
-   UPLOAD_DIR=./uploads
-   ```
-
-4. 運行服務:
-   ```
-   uvicorn main:app --reload
-   ```
-   或使用提供的腳本:
-   ```
-   chmod +x run.sh
-   ./run.sh
-   ```
-
-5. 訪問 API 文檔:
-   - Swagger UI: http://localhost:8000/api/v1/docs
-   - ReDoc: http://localhost:8000/api/v1/redoc
-
-### 疑難排解
-
-如果您在安裝依賴或啟動應用時遇到問題，可以嘗試以下方法：
-
-1. **驗證環境設置**：
-   ```
-   # 激活虛擬環境
-   source .venv/bin/activate
-   
-   # 運行測試腳本檢查依賴
-   python test_setup.py
-   ```
-
-2. **依賴安裝問題**：
-   - 如果某些包無法編譯，嘗試更新 pip：`pip install --upgrade pip`
-   - 嘗試安裝預編譯的二進制包：`pip install --only-binary=:all: -r requirements.txt`
-
-3. **uvicorn 命令找不到**：
-   - 確保虛擬環境已激活
-   - 使用 Python 模塊方式運行：`python -m uvicorn main:app --reload`
-
-4. **MongoDB 或 Redis 連接問題**：
-   - 確保服務已啟動
-   - 檢查連接字符串和認證設置
-   - 檢查網絡/防火牆設置
-
-## API 端點概覽
-
-- `/api/v1/projects/`: 專案管理
-- `/api/v1/tasks/`: 任務管理
-- `/api/v1/comments/`: 評論管理
-- `/api/v1/sprints/`: 衝刺管理
-- `/api/v1/boards/`: 看板管理
-- `/api/v1/tags/`: 標籤管理
-- `/api/v1/attachments/`: 附件管理
-- `/api/v1/relationships/`: 任務關係管理
-- `/api/v1/search/`: 全文搜索
-- `/api/v1/events/`: SSE 實時事件
-- `/api/v1/notifications/`: 通知管理
-- `/api/v1/activity_logs/`: 活動日誌
-
-## 數據模型
-
-系統包含以下主要數據集合:
-
-- `projects`: 專案定義和設置
-- `users`: 用戶基本信息
-- `tasks`: 任務及其詳細信息
-- `comments`: 任務評論
-- `sprints`: 衝刺定義和狀態
-- `boards`: 看板和列定義
-- `attachments`: 上傳文件的元信息
-- `activity_logs`: 系統變更記錄
-- `notifications`: 用戶通知
-- `relationships`: 任務間的關係
-- `tags`: 標籤及其使用統計
-
-## 開發
-
-### 項目結構
-
+1. 克隆代码库
+```bash
+git clone <repository-url>
+cd task_manager_server
 ```
-task_manager_server/
-├── app/
-│   ├── api/
-│   │   └── api_v1/
-│   │       ├── endpoints/        # API 端點
-│   │       └── api.py            # API 路由註冊
-│   ├── core/                     # 核心配置
-│   ├── db/                       # 數據庫連接
-│   ├── models/                   # Pydantic 模型
-│   ├── services/                 # 業務服務
-│   └── utils/                    # 工具函數
-├── uploads/                      # 文件上傳目錄
-├── .env                          # 環境變量
-├── main.py                       # 應用入口
-├── requirements.txt              # 依賴清單
-└── run.sh                        # 運行腳本
+
+2. 设置虚拟环境
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# 或在Windows上:
+# .venv\Scripts\activate
 ```
+
+3. 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+4. 配置环境变量
+```bash
+# 在.env文件中配置
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DB_NAME=task_manager_db
+REDIS_URL=redis://localhost:6379
+ENCRYPTION_KEY=your-secure-encryption-key
+```
+
+5. 启动服务器
+```bash
+uvicorn main:app --reload
+```
+
+6. 访问API文档
+```
+http://localhost:8000/api/v1/docs
+```
+
+## API概览
+
+系统提供RESTful API端点，分为以下几类：
+
+### 项目与任务管理
+- 项目 CRUD：`/api/v1/projects/`
+- 任务 CRUD：`/api/v1/tasks/`
+- 冲刺管理：`/api/v1/sprints/`
+- 看板管理：`/api/v1/boards/`
+- 评论系统：`/api/v1/comments/`
+
+### 用户与团队
+- 用户管理：`/api/v1/users/`
+- 通知系统：`/api/v1/notifications/`
+- 活动日志：`/api/v1/activity_logs/`
+
+### Git仓库管理
+- 凭证管理：`/api/v1/git/credentials/`
+- 仓库管理：`/api/v1/git/repos/`
+- 代码浏览：`/api/v1/code/`
+- 文档管理：`/api/v1/docs/`
+
+### 其他功能
+- 搜索功能：`/api/v1/search/`
+- 标签管理：`/api/v1/tags/`
+- 附件管理：`/api/v1/attachments/`
+- 事件系统：`/api/v1/events/`
+
+## 安全与性能
+
+- 所有Git令牌使用Fernet加密存储
+- API使用JWT进行身份验证和授权
+- 异步架构确保高性能和可扩展性
+- MongoDB和Redis为数据存储和缓存提供支持
+
+## 开发计划
+
+- AI辅助任务分析与文档生成
+- 代码质量分析集成
+- 更多Git平台支持（如Bitbucket）
+- 高级报表和数据可视化
+- 移动应用API扩展
+
+## 贡献
+
+欢迎提交Pull Requests和Issue报告！
+
+## 许可证
+
+[指定许可证类型]

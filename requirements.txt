@@ -1,13 +1,25 @@
-fastapi==0.109.0
-uvicorn==0.27.0
-motor==3.3.2
-pydantic==2.8.2
-pydantic-settings==2.1.0
-python-multipart==0.0.9
-aiofiles==23.2.1
-redis==5.0.1
-pymongo==4.6.1
-email-validator==2.1.0
-python-jose==3.3.0
-passlib==1.7.4
-bcrypt==4.1.2
+# Web框架和异步支持
+fastapi>=0.95.0
+uvicorn>=0.21.1
+asyncio>=3.4.3
+aiohttp>=3.8.4
+
+# 数据库驱动
+motor>=3.1.1
+pymongo>=4.3.3
+
+# 安全与加密
+python-jose>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.1
+python-multipart>=0.0.5
+cryptography>=39.0.0
+
+# 工具库
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+email-validator>=2.0.0
+
+# 文档生成
+markdown>=3.4.3
