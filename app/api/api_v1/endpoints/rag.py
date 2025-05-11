@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 
 from app.services.embedding_service import EmbeddingService
 from app.services.rag_service import RAGService
+from app.services.rag_visualization_service import rag_visualization_service
 from app.models.rag_models import (
     EmbeddingRequest,
     SearchRequest,
@@ -135,4 +136,69 @@ async def delete_embeddings(repo_id: str):
         else:
             raise HTTPException(status_code=400, detail="Failed to delete embeddings.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting embeddings: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error deleting embeddings: {str(e)}")
+
+@router.get("/visualization/message/{message_id}", response_model=Dict[str, Any])
+async def get_message_visualization(message_id: str):
+    """
+    获取特定消息的RAG可视化数据
+    
+    Args:
+        message_id: 消息ID
+    
+    Returns:
+        可视化数据，包括检索到的源文件、得分等
+    """
+    try:
+        visualization_data = await rag_visualization_service.get_message_visualization(message_id)
+        
+        if not visualization_data:
+            return {
+                "success": False,
+                "message": "No visualization data found for this message"
+            }
+        
+        return {
+            "success": True,
+            "data": visualization_data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving visualization data: {str(e)}")
+
+@router.post("/visualization/highlight", response_model=Dict[str, Any])
+async def highlight_context_matches(request: Dict[str, Any] = Body(...)):
+    """
+    高亮查询与上下文的匹配部分
+    
+    请求体:
+        {
+            "query": "查询文本",
+            "context": "上下文内容",
+            "language": "编程语言(可选)"
+        }
+    
+    Returns:
+        包含高亮信息的数据
+    """
+    try:
+        query = request.get("query")
+        context = request.get("context")
+        language = request.get("language")
+        
+        if not query or not context:
+            raise HTTPException(status_code=400, detail="Query and context are required")
+        
+        highlight_data = await rag_visualization_service.highlight_context_matches(
+            query=query,
+            context=context,
+            language=language
+        )
+        
+        return {
+            "success": True,
+            "data": highlight_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error highlighting context: {str(e)}") 

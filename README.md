@@ -99,6 +99,8 @@ http://localhost:8000/api/v1/docs
 ### Git仓库管理
 - 凭证管理：`/api/v1/git/credentials/`
 - 仓库管理：`/api/v1/git/repos/`
+  - 支持按项目(project_id)组织管理仓库
+  - 可通过project_id参数过滤特定项目的仓库
 - 代码浏览：`/api/v1/code/`
 - 文档管理：`/api/v1/docs/`
 
@@ -142,6 +144,29 @@ http://localhost:8000/api/v1/docs
 - 使用SentenceTransformer處理文檔嵌入
 - 支持多種LLM（OpenAI、Anthropic、Google）
 - 高效的代碼和文檔分塊策略
+- 多用戶WebSocket實時對話
+- RAG結果可視化與高亮顯示
+
+### 對話功能
+
+系統提供基於WebSocket的實時對話功能，支持以下特性：
+
+- 多用戶對話：支持多個用戶同時進行對話
+- 會話管理：創建、獲取、更新和刪除對話會話
+- 消息管理：發送、接收、編輯和刪除消息
+- 斷線重連：自動處理網絡中斷並恢復對話狀態
+- 實時更新：消息狀態變化即時推送
+- RAG結果可視化：高亮顯示檢索結果與查詢的匹配部分
+
+### RAG可視化
+
+RAG可視化功能讓用戶能夠：
+
+- 查看檢索到的代碼和文檔片段
+- 觀察相關性得分和排名
+- 高亮顯示查詢與內容的匹配部分
+- 直接訪問源文件
+- 分析不同類型文件的檢索分佈
 
 ### 環境配置
 
@@ -164,6 +189,26 @@ OPENAI_API_KEY="your-openai-api-key"
 # ANTHROPIC_API_KEY="your-anthropic-api-key"
 # GOOGLE_API_KEY="your-google-api-key"
 ```
+
+### 初始化向量數據庫
+
+ChromaDB 數據庫文件會在首次使用 RAG 功能時自動創建。如果需要手動初始化數據庫，請按照以下步驟操作:
+
+1. 確保已正確設置 `.env` 文件中的 `CHROMA_PERSIST_DIR` 變量
+2. 創建數據庫目錄（如果不存在）:
+   ```
+   mkdir -p ./chroma_db
+   ```
+3. 使用 API 導入倉庫數據並生成嵌入:
+   ```
+   POST /api/v1/rag/embeddings/generate/{repo_id}
+   {
+     "repo_id": "your-repo-id",
+     "force_regenerate": true
+   }
+   ```
+
+注意: 向量數據庫文件 (`chroma_db/`) 不會被包含在 Git 倉庫中，每個環境需要獨立初始化。
 
 ### 使用方法
 
@@ -202,7 +247,28 @@ OPENAI_API_KEY="your-openai-api-key"
    }
    ```
 
-5. 刪除倉庫嵌入:
+5. 獲取RAG可視化數據:
+   ```
+   GET /api/v1/rag/visualization/message/{message_id}
+   ```
+
+6. 自定義高亮顯示:
+   ```
+   POST /api/v1/rag/visualization/highlight
+   {
+     "query": "如何使用formatDate函數?",
+     "context": "代碼或文檔內容",
+     "language": "javascript"
+   }
+   ```
+
+7. 使用WebSocket連接進行對話:
+   ```
+   WebSocket: ws://localhost:8000/api/v1/ws/chat
+   WebSocket: ws://localhost:8000/api/v1/ws/chat/{conversation_id}
+   ```
+
+8. 刪除倉庫嵌入:
    ```
    DELETE /api/v1/rag/embeddings/{repo_id}
    ```
