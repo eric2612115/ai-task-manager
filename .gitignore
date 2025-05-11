@@ -37,3 +37,4 @@ env/
 uploads/
 *.log
 .DS_Store
+chroma_db/

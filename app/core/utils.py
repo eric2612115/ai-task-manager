@@ -4,8 +4,7 @@ from typing import Any, Dict, List, Union
 
 def serialize_mongodb_doc(doc: Union[Dict[str, Any], List[Dict[str, Any]]]) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """
-    递归地将 MongoDB 文档中的 ObjectId 转换为字符串，
-    以便于 JSON 序列化。
+    pass mongo_db_id to serialize_mongodb_doc to convert ObjectId to string
     """
     if doc is None:
         return None

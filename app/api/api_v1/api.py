@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import users, projects, tasks, comments, sprints, boards, attachments, search, tags, events, activity_logs, relationships, notifications, git, code, docs, rag
+from app.api.api_v1.endpoints import users, projects, tasks, comments, sprints, boards, attachments, search, tags, events, activity_logs, relationships, notifications, git, code, docs, rag, websockets, conversations
 
 api_router = APIRouter()
 
@@ -38,7 +38,13 @@ api_router.include_router(git.router, prefix="/git", tags=["git"])
 api_router.include_router(code.router, prefix="/code", tags=["code"])
 
 # 添加文档路由
-api_router.include_router(docs.router, prefix="/docs", tags=["docs"])
+api_router.include_router(docs.router, prefix="/project-docs", tags=["docs"])
 
 # 添加RAG系统路由
 api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
+
+# 添加WebSocket路由
+api_router.include_router(websockets.router, prefix="/ws", tags=["websockets"])
+
+# 添加对话会话路由
+api_router.include_router(conversations.router, prefix="/conversations", tags=["conversations"])

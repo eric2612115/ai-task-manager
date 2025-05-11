@@ -257,10 +257,16 @@ class GitService:
         
         # 标记现有仓库
         for repo in repos:
-            existing = await mongodb.db.repositories.find_one({
+            query = {
                 "full_name": repo["full_name"],
                 "platform": repo["platform"]
-            })
+            }
+            
+            # 如果请求中包含project_id，将其添加到查询条件中
+            if "project_id" in repo:
+                query["project_id"] = ObjectId(repo["project_id"])
+                
+            existing = await mongodb.db.repositories.find_one(query)
             
             if existing:
                 repo["exists"] = True
@@ -370,10 +376,16 @@ class GitService:
             raise ValueError("Credential not found")
         
         # 检查是否已存在
-        existing = await mongodb.db.repositories.find_one({
+        query = {
             "full_name": data["full_name"],
             "platform": data["platform"]
-        })
+        }
+        
+        # 如果提供了project_id，则加入查询条件
+        if "project_id" in data and data["project_id"] is not None:
+            query["project_id"] = ObjectId(data["project_id"])
+        
+        existing = await mongodb.db.repositories.find_one(query)
         
         if existing:
             raise ValueError(f"Repository {data['full_name']} already exists")
@@ -395,12 +407,21 @@ class GitService:
             "updated_at": datetime.utcnow()
         }
         
+        # 添加project_id（如果存在）
+        if "project_id" in data and data["project_id"] is not None:
+            repo_data["project_id"] = ObjectId(data["project_id"])
+        
         result = await mongodb.db.repositories.insert_one(repo_data)
         return await mongodb.db.repositories.find_one({"_id": result.inserted_id})
     
-    async def get_repositories(self, skip: int = 0, limit: int = 100) -> List[Dict]:
-        """获取所有仓库"""
-        cursor = mongodb.db.repositories.find().skip(skip).limit(limit)
+    async def get_repositories(self, skip: int = 0, limit: int = 100, project_id: Optional[str] = None) -> List[Dict]:
+        """获取所有仓库，可选按项目ID过滤"""
+        # 构建查询条件
+        query = {}
+        if project_id:
+            query["project_id"] = ObjectId(project_id)
+            
+        cursor = mongodb.db.repositories.find(query).skip(skip).limit(limit)
         repos = await cursor.to_list(length=limit)
         
         # 添加凭证信息

@@ -6,17 +6,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from fastapi.encoders import jsonable_encoder
 import json
+import asyncio
 
 from app.core.config import settings
 from app.db.mongodb import mongodb
 from app.db.redis import redis_manager
 from app.api.api_v1.api import api_router
 from app.core.custom_json import CustomJSONEncoder
+from app.services.websocket_manager import connection_manager
+
+# 全局任务列表
+background_tasks = []
 
 # 初始化環境或建立連接
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時的操作
+    global background_tasks
     try:
         # 連接到MongoDB
         print("Connecting to MongoDB...")
@@ -27,6 +33,13 @@ async def lifespan(app: FastAPI):
         print("Connecting to Redis...")
         await redis_manager.get_redis_connection()
         print("Redis connection established")
+        
+        # 启动WebSocket连接监控任务
+        print("Starting WebSocket connection monitor...")
+        monitor_task = asyncio.create_task(connection_manager.monitor_connections())
+        background_tasks.append(monitor_task)
+        print("WebSocket connection monitor started")
+        
     except Exception as e:
         print(f"Error during startup: {e}")
         # 在真實環境中應考慮希望應用在此失敗時是否應該結束
@@ -37,6 +50,16 @@ async def lifespan(app: FastAPI):
     
     # 關閉時的操作
     try:
+        # 取消所有后台任务
+        print("Cancelling background tasks...")
+        for task in background_tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        background_tasks = []
+            
         # 關閉MongoDB連接
         await mongodb.close_mongodb_connection()
         # 關閉Redis連接

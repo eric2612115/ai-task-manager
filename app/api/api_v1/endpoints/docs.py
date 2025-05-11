@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from app.models.doc_models import DocCreate, DocUpdate, DocGenerateRequest
 from app.services.doc_service import DocService
+from app.core.utils import serialize_mongodb_doc
 
 router = APIRouter()
 doc_service = DocService()
@@ -15,7 +16,7 @@ async def create_document(doc: DocCreate):
         result = await doc_service.create_document(doc.model_dump())
         return {
             "success": True,
-            "data": result,
+            "data": serialize_mongodb_doc(result),
             "message": "Document created successfully"
         }
     except ValueError as e:
@@ -24,13 +25,13 @@ async def create_document(doc: DocCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("", response_model=dict)
-async def get_documents(repo_id: Optional[str] = None, skip: int = 0, limit: int = 100):
+async def get_documents(project_id: Optional[str] = None, skip: int = 0, limit: int = 100):
     """获取文档列表"""
     try:
-        result = await doc_service.get_documents(repo_id, skip, limit)
+        result = await doc_service.get_documents(project_id, skip, limit)
         return {
             "success": True,
-            "data": result,
+            "data": serialize_mongodb_doc(result),
             "count": len(result)
         }
     except Exception as e:
@@ -47,7 +48,7 @@ async def get_document(doc_id: str):
         
         return {
             "success": True,
-            "data": result
+            "data": serialize_mongodb_doc(result)
         }
     except HTTPException:
         raise
@@ -65,7 +66,7 @@ async def update_document(doc_id: str, doc: DocUpdate, user_id: Optional[str] = 
         
         return {
             "success": True,
-            "data": result,
+            "data": serialize_mongodb_doc(result),
             "message": "Document updated successfully"
         }
     except HTTPException:
@@ -99,7 +100,7 @@ async def get_document_versions(doc_id: str, skip: int = 0, limit: int = 20):
         
         return {
             "success": True,
-            "data": result,
+            "data": serialize_mongodb_doc(result),
             "count": len(result)
         }
     except Exception as e:
@@ -116,19 +117,19 @@ async def get_document_version(doc_id: str, version_number: int):
         
         return {
             "success": True,
-            "data": result
+            "data": serialize_mongodb_doc(result)
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/{repo_id}/generate", response_model=dict)
-async def generate_documentation(repo_id: str, request: DocGenerateRequest):
+@router.post("/projects/{project_id}/generate", response_model=dict)
+async def generate_documentation(project_id: str, request: DocGenerateRequest):
     """生成文档"""
     try:
         result = await doc_service.generate_documentation(
-            repo_id,
+            project_id,
             request.source_files,
             request.title if hasattr(request, 'title') else "Generated Documentation",
             request.doc_type
@@ -136,7 +137,7 @@ async def generate_documentation(repo_id: str, request: DocGenerateRequest):
         
         return {
             "success": True,
-            "data": result,
+            "data": serialize_mongodb_doc(result),
             "message": "Document generated successfully"
         }
     except ValueError as e:

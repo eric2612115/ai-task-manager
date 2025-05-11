@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from app.models.base_models import MongoBaseModel, PyObjectId
 
 class ProjectDocumentation(MongoBaseModel):
-    repository_id: PyObjectId
+    project_id: PyObjectId
     title: str
     content: str  # Markdown格式内容
     path: Optional[str] = None  # 文档的路径
@@ -25,7 +25,7 @@ class DocumentationVersion(MongoBaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class DocCreate(BaseModel):
-    repository_id: PyObjectId
+    project_id: PyObjectId
     title: str
     content: str
     path: Optional[str] = None

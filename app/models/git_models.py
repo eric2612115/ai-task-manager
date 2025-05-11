@@ -34,6 +34,7 @@ class GitCredentialUpdate(BaseModel):
 
 class Repository(MongoBaseModel):
     credential_id: PyObjectId
+    project_id: Optional[PyObjectId] = None  # 新增project_id字段
     platform: Literal["github", "gitlab"]
     owner: str  # 组织或用户名
     name: str   # 仓库名
@@ -51,6 +52,7 @@ class Repository(MongoBaseModel):
 
 class RepositoryCreate(BaseModel):
     credential_id: PyObjectId
+    project_id: Optional[PyObjectId] = None  # 新增project_id字段
     platform: Literal["github", "gitlab"]
     owner: str
     name: str

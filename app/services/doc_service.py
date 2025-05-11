@@ -10,14 +10,14 @@ logger = logging.getLogger(__name__)
 class DocService:
     async def create_document(self, data: Dict) -> Dict:
         """创建文档"""
-        # 验证仓库是否存在
-        repo = await mongodb.db.repositories.find_one({"_id": ObjectId(data["repository_id"])})
-        if not repo:
-            raise ValueError("Repository not found")
+        # 验证项目是否存在
+        project = await mongodb.db.projects.find_one({"_id": ObjectId(data["project_id"])})
+        if not project:
+            raise ValueError("Project not found")
         
         # 准备文档数据
         doc_data = {
-            "repository_id": ObjectId(data["repository_id"]),
+            "project_id": ObjectId(data["project_id"]),
             "title": data["title"],
             "content": data["content"],
             "path": data.get("path"),
@@ -46,12 +46,12 @@ class DocService:
         
         return doc
     
-    async def get_documents(self, repo_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Dict]:
+    async def get_documents(self, project_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Dict]:
         """获取文档列表"""
         query = {"is_deleted": False}
         
-        if repo_id:
-            query["repository_id"] = ObjectId(repo_id)
+        if project_id:
+            query["project_id"] = ObjectId(project_id)
         
         cursor = mongodb.db.project_documentations.find(query).sort("updated_at", -1).skip(skip).limit(limit)
         return await cursor.to_list(length=limit)
@@ -152,35 +152,45 @@ class DocService:
             "version_number": version_number
         })
     
-    async def generate_documentation(self, repo_id: str, source_files: List[str], title: str, doc_type: str = "technical") -> Dict:
+    async def generate_documentation(self, project_id: str, source_files: List[str], title: str, doc_type: str = "technical") -> Dict:
         """生成文档"""
-        # 验证仓库是否存在
-        repo = await mongodb.db.repositories.find_one({"_id": ObjectId(repo_id)})
-        if not repo:
-            raise ValueError("Repository not found")
+        # 验证项目是否存在
+        project = await mongodb.db.projects.find_one({"_id": ObjectId(project_id)})
+        if not project:
+            raise ValueError("Project not found")
         
-        # 获取文件内容
+        # 获取该项目下的代码文件内容
         file_contents = []
         for file_path in source_files:
-            file = await mongodb.db.code_files.find_one({
-                "repository_id": ObjectId(repo_id),
-                "file_path": file_path,
-                "is_deleted": False
-            })
+            # 在该项目的所有仓库中查找文件
+            repos = await mongodb.db.repositories.find({"project_id": ObjectId(project_id)}).to_list(None)
+            repo_ids = [repo["_id"] for repo in repos]
             
-            if file:
-                file_contents.append({
-                    "path": file["file_path"],
-                    "language": file.get("code_language"),
-                    "content": file["content"]
+            if not repo_ids:
+                logger.warning(f"No repositories found for project {project_id}")
+                continue
+                
+            for repo_id in repo_ids:
+                file = await mongodb.db.code_files.find_one({
+                    "repository_id": repo_id,
+                    "file_path": file_path,
+                    "is_deleted": False
                 })
+                
+                if file:
+                    file_contents.append({
+                        "path": file["file_path"],
+                        "language": file.get("code_language"),
+                        "content": file["content"]
+                    })
+                    break  # 找到文件后停止遍历其他仓库
         
         # 生成文档内容
         content = self._generate_content(file_contents, doc_type)
         
         # 创建文档
         doc_data = {
-            "repository_id": ObjectId(repo_id),
+            "project_id": ObjectId(project_id),
             "title": title,
             "content": content,
             "path": None,

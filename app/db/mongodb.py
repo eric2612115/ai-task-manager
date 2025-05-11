@@ -10,7 +10,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 class Database:
-    client: Optional[AsyncIOMotorClient] = None
+    client: Optional["AsyncIOMotorClient"] = None
     db = None
     
     async def connect_to_mongodb(self):
@@ -69,6 +69,10 @@ class Database:
         await self.init_code_collections()
         # 初始化文档集合
         await self.init_doc_collections()
+        # 初始化会话集合
+        await self.init_conversation_collections()
+        # 初始化RAG嵌入状态集合
+        await self.init_embedding_collections()
     
     async def init_users_collection(self):
         """初始化用戶集合和索引"""
@@ -257,6 +261,51 @@ class Database:
             IndexModel([("created_at", DESCENDING)])
         ]
         await self.db.documentation_versions.create_indexes(doc_versions_indexes)
+
+    async def init_conversation_collections(self):
+        """初始化对话会话相关集合和索引"""
+        # 会话集合
+        conversations_indexes = [
+            IndexModel([("user_id", ASCENDING)]),
+            IndexModel([("project_id", ASCENDING)]),
+            IndexModel([("repo_id", ASCENDING)]),
+            IndexModel([("is_pinned", DESCENDING)]),
+            IndexModel([("last_message_at", DESCENDING)]),
+            IndexModel([("title", TEXT)], name="conversation_text_search")
+        ]
+        await self.db.conversations.create_indexes(conversations_indexes)
+        
+        # 消息集合
+        messages_indexes = [
+            IndexModel([("conversation_id", ASCENDING)]),
+            IndexModel([("user_id", ASCENDING)]),
+            IndexModel([("role", ASCENDING)]),
+            IndexModel([("type", ASCENDING)]),
+            IndexModel([("status", ASCENDING)]),
+            IndexModel([("created_at", ASCENDING)]),
+            IndexModel([("content", TEXT)], name="message_text_search")
+        ]
+        await self.db.messages.create_indexes(messages_indexes)
+        
+        # 连接状态集合
+        connection_states_indexes = [
+            IndexModel([("connection_id", ASCENDING)], unique=True),
+            IndexModel([("user_id", ASCENDING)]),
+            IndexModel([("status", ASCENDING)]),
+            IndexModel([("last_ping", DESCENDING)]),
+            IndexModel([("client_info.reconnect_token", ASCENDING)]),
+            IndexModel([("active_conversation_id", ASCENDING)])
+        ]
+        await self.db.connection_states.create_indexes(connection_states_indexes)
+    
+    async def init_embedding_collections(self):
+        """初始化RAG嵌入状态集合"""
+        embedding_status_indexes = [
+            IndexModel([("repository_id", ASCENDING)], unique=True),
+            IndexModel([("status", ASCENDING)]),
+            IndexModel([("last_updated", DESCENDING)])
+        ]
+        await self.db.embedding_status.create_indexes(embedding_status_indexes)
 
     async def _create_indexes(self):
         """创建数据库索引"""

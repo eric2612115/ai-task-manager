@@ -160,10 +160,16 @@ async def test_git_token(credential: GitCredentialTest):
 # ============== 仓库管理 API ==============
 
 @router.get("/repos/discover", response_model=dict)
-async def discover_repositories(credential_id: str):
+async def discover_repositories(credential_id: str, project_id: Optional[str] = None):
     """发现可访问的仓库"""
     try:
         result = await git_service.discover_repositories(credential_id)
+        
+        # 添加项目ID到结果中，便于前端创建仓库时使用
+        if project_id:
+            for repo in result:
+                repo["project_id"] = project_id
+                
         return {
             "success": True,
             "data": serialize_mongodb_doc(result),
@@ -188,10 +194,10 @@ async def create_repository(repo: RepositoryCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/repos", response_model=dict)
-async def get_repositories(skip: int = 0, limit: int = 100):
-    """获取所有仓库"""
+async def get_repositories(skip: int = 0, limit: int = 100, project_id: Optional[str] = None):
+    """获取所有仓库，可以按项目ID过滤"""
     try:
-        result = await git_service.get_repositories(skip, limit)
+        result = await git_service.get_repositories(skip, limit, project_id)
         return {
             "success": True,
             "data": serialize_mongodb_doc(result),
