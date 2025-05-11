@@ -26,6 +26,7 @@
 13. [代码文件管理](#代码文件管理)
 14. [文档管理](#文档管理)
 15. [RAG系统](#rag系统)
+16. [AI 配置管理](#ai-配置管理)
 
 ## 基礎 URL
 
@@ -2460,5 +2461,332 @@ WebSocket: ws://localhost:8000/api/v1/ws/chat/{conversation_id}
   "data": {
     "message": "Invalid JSON message"
   }
+}
+```
+
+## AI 配置管理
+
+管理不同 AI 服务提供商的配置和凭证。
+
+### 基础 URL
+
+```
+/api/v1/ai/config/
+```
+
+### 创建 AI 服务提供商配置
+
+```
+POST /ai/config/providers/
+```
+
+请求体：
+```json
+{
+  "provider_name": "openai",
+  "display_name": "Personal OpenAI Key",
+  "api_key": "sk-xxxxxxxxxxxxxxxxxxxx",
+  "is_active": true,
+  "models": ["gpt-4o", "gpt-4-turbo"],
+  "additional_config": {}
+}
+```
+
+说明：
+- `provider_name` 必须是系统支持的提供商之一（如 "openai", "google", "anthropic", "azure_openai", "aws_bedrock"）
+- `api_key` 为 API 密钥，将被加密存储
+- `additional_config` 根据不同的提供商可能需要不同的配置项（如 Azure OpenAI 需要 endpoint URL）
+
+响应 (201 Created)：
+```json
+{
+  "id": "64a2f3d5c1b8d3d7f8a9e0b2",
+  "user_id": "507f1f77bcf86cd799439011",
+  "provider_name": "openai",
+  "display_name": "Personal OpenAI Key",
+  "is_active": true,
+  "models": ["gpt-4o", "gpt-4-turbo"],
+  "additional_config": {},
+  "created_at": "2023-07-03T14:25:33Z",
+  "updated_at": "2023-07-03T14:25:33Z"
+}
+```
+
+### 获取 AI 服务提供商配置列表
+
+```
+GET /ai/config/providers/
+```
+
+查询参数：
+- `provider_name` (可选): 按提供商名称过滤
+- `is_active` (可选): 按激活状态过滤 (true/false)
+- `skip` (可选): 分页跳过数量, 默认为 0
+- `limit` (可选): 分页限制数量, 默认为 20
+
+响应 (200 OK)：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "64a2f3d5c1b8d3d7f8a9e0b2",
+      "user_id": "507f1f77bcf86cd799439011",
+      "provider_name": "openai",
+      "display_name": "Personal OpenAI Key",
+      "is_active": true,
+      "models": ["gpt-4o", "gpt-4-turbo"],
+      "additional_config": {},
+      "created_at": "2023-07-03T14:25:33Z",
+      "updated_at": "2023-07-03T14:25:33Z"
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 20
+}
+```
+
+### 获取单个 AI 服务提供商配置
+
+```
+GET /ai/config/providers/{config_id}
+```
+
+路径参数：
+- `config_id`: AI 服务提供商配置的 ID
+
+响应 (200 OK)：
+```json
+{
+  "id": "64a2f3d5c1b8d3d7f8a9e0b2",
+  "user_id": "507f1f77bcf86cd799439011",
+  "provider_name": "openai",
+  "display_name": "Personal OpenAI Key",
+  "is_active": true,
+  "models": ["gpt-4o", "gpt-4-turbo"],
+  "additional_config": {},
+  "created_at": "2023-07-03T14:25:33Z",
+  "updated_at": "2023-07-03T14:25:33Z"
+}
+```
+
+### 更新 AI 服务提供商配置
+
+```
+PUT /ai/config/providers/{config_id}
+```
+
+路径参数：
+- `config_id`: AI 服务提供商配置的 ID
+
+请求体：
+```json
+{
+  "display_name": "Updated OpenAI Key Name",
+  "api_key": "sk-new-key-if-needed",
+  "is_active": false,
+  "models": ["gpt-4o"]
+}
+```
+
+说明：
+- 所有字段都是可选的，只有提供的字段才会被更新
+- `provider_name` 通常不允许更改
+
+响应 (200 OK)：
+```json
+{
+  "id": "64a2f3d5c1b8d3d7f8a9e0b2",
+  "user_id": "507f1f77bcf86cd799439011",
+  "provider_name": "openai",
+  "display_name": "Updated OpenAI Key Name",
+  "is_active": false,
+  "models": ["gpt-4o"],
+  "additional_config": {},
+  "created_at": "2023-07-03T14:25:33Z",
+  "updated_at": "2023-07-03T15:10:42Z"
+}
+```
+
+### 删除 AI 服务提供商配置
+
+```
+DELETE /ai/config/providers/{config_id}
+```
+
+路径参数：
+- `config_id`: AI 服务提供商配置的 ID
+
+响应 (200 OK)：
+```json
+{
+  "success": true,
+  "message": "AI provider configuration deleted successfully"
+}
+```
+
+### 获取支持的 AI 服务提供商列表
+
+```
+GET /ai/config/supported-providers/
+```
+
+响应 (200 OK)：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "provider_name": "openai",
+      "display_name": "OpenAI",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "gpt-4o", "name": "gpt-4o"},
+        {"id": "gpt-4-turbo", "name": "gpt-4-turbo"},
+        {"id": "gpt-3.5-turbo", "name": "gpt-3.5-turbo"}
+      ]
+    },
+    {
+      "provider_name": "google",
+      "display_name": "Google AI",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key (Google AI Studio)" }
+      },
+      "models": [
+        {"id": "gemini-1.5-pro-latest", "name": "Gemini 1.5 Pro"},
+        {"id": "gemini-1.5-flash-latest", "name": "Gemini 1.5 Flash"}
+      ]
+    },
+    {
+      "provider_name": "anthropic",
+      "display_name": "Anthropic",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "claude-3.5-sonnet", "name": "claude-3.5-sonnet"},
+        {"id": "claude-3.7-sonnet", "name": "claude-3.7-sonnet"}
+      ]
+    }
+  ]
+}
+```
+
+### 更新支持的 AI 服务提供商列表
+
+```
+PUT /ai/config/supported-providers/
+```
+
+请求体：
+```json
+{
+  "providers": [
+    {
+      "provider_name": "openai",
+      "display_name": "OpenAI",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "gpt-4o", "name": "gpt-4o"},
+        {"id": "gpt-4-turbo", "name": "gpt-4-turbo"}
+      ]
+    }
+  ]
+}
+```
+
+响应 (200 OK)：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "provider_name": "openai",
+      "display_name": "OpenAI",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "gpt-4o", "name": "gpt-4o"},
+        {"id": "gpt-4-turbo", "name": "gpt-4-turbo"}
+      ]
+    }
+  ]
+}
+```
+
+### 根据模型名称列表更新提供商模型
+
+```
+POST /ai/config/supported-providers/update-models
+```
+
+请求体：
+```json
+{
+  "ai_model_names": [
+    "gpt-4o",
+    "claude-3.5-sonnet", 
+    "gemini-1.5-pro",
+    "grok-3-mini-beta"
+  ]
+}
+```
+
+说明：
+- 系统将自动识别每个模型名称属于哪个提供商，并更新相应提供商的模型列表
+- 若提供的模型名称无法识别，则会被忽略
+
+响应 (200 OK)：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "provider_name": "openai",
+      "display_name": "OpenAI",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "gpt-4o", "name": "gpt-4o"}
+      ]
+    },
+    {
+      "provider_name": "anthropic",
+      "display_name": "Anthropic",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "claude-3.5-sonnet", "name": "claude-3.5-sonnet"}
+      ]
+    },
+    {
+      "provider_name": "google",
+      "display_name": "Google AI",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key (Google AI Studio)" }
+      },
+      "models": [
+        {"id": "gemini-1.5-pro", "name": "gemini-1.5-pro"}
+      ]
+    },
+    {
+      "provider_name": "xai",
+      "display_name": "xAI (Grok)",
+      "credentials_schema": {
+        "api_key": { "type": "password", "required": true, "label": "API Key" }
+      },
+      "models": [
+        {"id": "grok-3-mini-beta", "name": "grok-3-mini-beta"}
+      ]
+    }
+  ]
 }
 ```

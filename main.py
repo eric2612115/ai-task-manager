@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.db.mongodb import mongodb
 from app.db.redis import redis_manager
 from app.api.api_v1.api import api_router
+from app.ai_configs.routers import router as ai_configs_router
 from app.core.custom_json import CustomJSONEncoder
 from app.services.websocket_manager import connection_manager
 
@@ -110,6 +111,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # 添加路由
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+app.include_router(ai_configs_router, prefix=settings.API_V1_PREFIX)
 
 # 根路由
 @app.get("/")

@@ -52,8 +52,8 @@ class Message(MongoBaseModel):
     original_content: Optional[str] = None
     metadata: Dict[str, Any] = {}
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "conversation_id": "507f1f77bcf86cd799439011",
                 "user_id": "507f1f77bcf86cd799439012",
@@ -65,6 +65,7 @@ class Message(MongoBaseModel):
                 "references": []
             }
         }
+    }
 
 class Conversation(MongoBaseModel):
     """对话会话模型"""
@@ -84,8 +85,8 @@ class Conversation(MongoBaseModel):
         "include_docs": True
     }
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "title": "项目代码问答",
                 "user_id": "507f1f77bcf86cd799439011",
@@ -97,6 +98,7 @@ class Conversation(MongoBaseModel):
                 "message_count": 5
             }
         }
+    }
 
 class ConnectionState(MongoBaseModel):
     """连接状态模型"""

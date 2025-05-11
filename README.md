@@ -48,6 +48,23 @@
 - **内容分块优化**：针对代码和文档的智能分块策略
 - **结果可视化**：高亮显示查询与内容的匹配部分
 
+### AI提供商配置管理
+
+用于管理和配置与系统集成的各种AI服务提供商：
+
+#### 实现目标
+- **灵活的AI集成**：支持多种AI服务提供商，增强系统适应性
+- **安全的凭证管理**：安全存储和管理API密钥等敏感信息
+- **用户个性化**：允许用户根据自己的偏好配置不同的AI服务
+- **简化开发流程**：通过统一接口简化多种AI服务的接入
+
+#### 特性
+- **多提供商支持**：支持OpenAI、Google、Anthropic、Azure OpenAI和AWS Bedrock等
+- **安全存储**：所有API密钥和敏感信息进行加密存储
+- **动态模型列表**：为每个提供商提供可用模型的动态列表
+- **活跃状态管理**：随时启用或禁用特定的AI配置
+- **凭证掩码**：在UI和API响应中对敏感信息进行掩码处理
+
 ### 多用户对话系统
 
 实时WebSocket通信框架，支持与项目代码库相关的智能对话：
@@ -115,6 +132,12 @@ CHROMA_COLLECTION_CODE="code_embeddings"
 CHROMA_COLLECTION_DOCS="doc_embeddings"
 CODEBERT_MODEL="microsoft/codebert-base"
 SENTENCE_TRANSFORMER_MODEL="all-MiniLM-L6-v2"
+
+# AI提供商配置加密
+ENCRYPTION_SECRET_KEY="secure-key-for-ai-provider-configs"
+ENCRYPTION_SALT="secure-salt-for-key-derivation"
+
+# 默认LLM配置
 LLM_PROVIDER="openai"
 OPENAI_API_KEY="your-openai-api-key"
 ```
@@ -151,7 +174,9 @@ http://localhost:8000/api/v1/docs
 - 代码浏览：`/api/v1/code/`
 - 文档管理：`/api/v1/docs/`
 
-### RAG与对话系统
+### AI与智能功能
+- AI配置管理：`/api/v1/ai/config/providers/`
+- 支持的AI提供商：`/api/v1/ai/config/supported-providers/`
 - 嵌入管理：`/api/v1/rag/embeddings/`
 - 语义搜索：`/api/v1/rag/search`
 - RAG查询：`/api/v1/rag/query`
@@ -164,6 +189,26 @@ http://localhost:8000/api/v1/docs
 - 标签管理：`/api/v1/tags/`
 - 附件管理：`/api/v1/attachments/`
 - 事件系统：`/api/v1/events/`
+
+## 使用AI配置系统
+
+### 添加新的API凭证
+
+```
+POST /api/v1/ai/config/providers/
+{
+  "provider_name": "openai",
+  "display_name": "开发团队OpenAI密钥",
+  "api_key": "sk-your-api-key",
+  "models": ["gpt-4o", "gpt-4-turbo"]
+}
+```
+
+### 获取支持的AI服务提供商
+
+```
+GET /api/v1/ai/config/supported-providers/
+```
 
 ## 使用RAG系统
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.api_v1.endpoints import users, projects, tasks, comments, sprints, boards, attachments, search, tags, events, activity_logs, relationships, notifications, git, code, docs, rag, websockets, conversations
+from app.ai_configs.routers import router as ai_configs_router
 
 api_router = APIRouter()
 
@@ -48,3 +49,6 @@ api_router.include_router(websockets.router, prefix="/ws", tags=["websockets"])
 
 # 添加对话会话路由
 api_router.include_router(conversations.router, prefix="/conversations", tags=["conversations"])
+
+# 添加AI配置路由
+api_router.include_router(ai_configs_router)

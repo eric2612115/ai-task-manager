@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "task_manager_db")
     
+    # For compatibility with db_client.py
+    MONGODB_URI: str = MONGODB_URL
+    MONGODB_DATABASE: str = MONGODB_DB_NAME
+    
     # Redis 配置
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     
@@ -49,6 +53,10 @@ class Settings(BaseSettings):
     # Git凭证加密密钥
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "zULrahkKOCpvWbhfr-PNc_jMTJYqXEucc_Nw85GNjfk=")  # 固定默认密钥，仅用于开发环境
     
+    # AI Provider Config encryption settings
+    ENCRYPTION_SECRET_KEY: str = os.getenv("ENCRYPTION_SECRET_KEY", "ai-provider-encryption-key-for-secure-storage")
+    ENCRYPTION_SALT: str = os.getenv("ENCRYPTION_SALT", "ai-provider-salt-value-for-kdf")
+    
     # ChromaDB 配置
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
     CHROMA_COLLECTION_CODE: str = os.getenv("CHROMA_COLLECTION_CODE", "code_embeddings")
@@ -75,8 +83,9 @@ class Settings(BaseSettings):
         os.makedirs(v, exist_ok=True)
         return v
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True
+    }
 
 settings = Settings()

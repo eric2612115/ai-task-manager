@@ -4,6 +4,7 @@ from pymongo.errors import ServerSelectionTimeoutError
 from typing import Optional
 import asyncio
 import logging
+from datetime import datetime
 
 from app.core.config import settings
 
@@ -300,12 +301,97 @@ class Database:
     
     async def init_embedding_collections(self):
         """初始化RAG嵌入状态集合"""
-        embedding_status_indexes = [
-            IndexModel([("repository_id", ASCENDING)], unique=True),
-            IndexModel([("status", ASCENDING)]),
-            IndexModel([("last_updated", DESCENDING)])
-        ]
-        await self.db.embedding_status.create_indexes(embedding_status_indexes)
+        try:
+            # 获取现有索引信息
+            existing_indexes = await self.db.embedding_status.index_information()
+            
+            # 确保embedding_history集合存在
+            if "embedding_history" not in await self.db.list_collection_names():
+                await self.db.create_collection("embedding_history")
+                print("创建embedding_history集合用于存储历史记录")
+            
+            # 为历史记录集合创建索引
+            embedding_history_indexes = [
+                IndexModel([("repository_id", ASCENDING)]),
+                IndexModel([("original_id", ASCENDING)]),
+                IndexModel([("archived_at", DESCENDING)])
+            ]
+            await self.db.embedding_history.create_indexes(embedding_history_indexes)
+            
+            # 查找现有记录中的重复repository_id，将旧记录存入历史集合
+            repo_ids = await self.db.embedding_status.distinct("repository_id")
+            has_duplicates = False
+            for repo_id in repo_ids:
+                records = await self.db.embedding_status.find({"repository_id": repo_id}).sort("last_updated", -1).to_list(None)
+                if len(records) > 1:
+                    has_duplicates = True
+                    # 保留最新的记录，将其他记录移到历史集合
+                    latest_record = records[0]
+                    for old_record in records[1:]:
+                        # 添加归档时间并移除_id字段(让MongoDB自动生成新的)
+                        old_id = old_record.pop("_id")
+                        old_record["original_id"] = str(old_id)
+                        old_record["archived_at"] = datetime.utcnow()
+                        await self.db.embedding_history.insert_one(old_record)
+                    
+                    # 删除旧记录
+                    await self.db.embedding_status.delete_many({
+                        "repository_id": repo_id,
+                        "_id": {"$ne": latest_record["_id"]}
+                    })
+                    print(f"仓库ID {repo_id} 的旧记录已移至历史集合")
+            
+            # 定义预期的索引规格
+            expected_indexes = {
+                "unique_repository_id": {"key": [("repository_id", ASCENDING)], "unique": True},
+                "status_index": {"key": [("status", ASCENDING)]},
+                "last_updated_index": {"key": [("last_updated", DESCENDING)]}
+            }
+            
+            # 检查是否需要重建索引
+            needs_rebuild = False
+            
+            # 检查是否有重复记录或索引不一致的情况
+            if has_duplicates:
+                needs_rebuild = True
+            elif "_id_" in existing_indexes:  # 确保至少存在默认索引
+                for idx_name, idx_spec in expected_indexes.items():
+                    # 检查索引是否存在且规格一致
+                    if idx_name not in existing_indexes:
+                        needs_rebuild = True
+                        break
+                    
+                    # 检查唯一性约束
+                    if idx_name == "unique_repository_id" and "unique" in idx_spec:
+                        if not existing_indexes.get(idx_name, {}).get("unique", False):
+                            needs_rebuild = True
+                            break
+            else:
+                # 如果没有找到索引，需要创建
+                needs_rebuild = True
+            
+            # 仅在必要时重建索引
+            if needs_rebuild:
+                print("检测到索引需要更新，正在重建索引...")
+                
+                # 删除现有索引（保留_id索引）
+                for idx_name in existing_indexes:
+                    if idx_name != "_id_":
+                        await self.db.embedding_status.drop_index(idx_name)
+                        
+                # 创建新索引
+                embedding_status_indexes = [
+                    IndexModel([("repository_id", ASCENDING)], unique=True, name="unique_repository_id"),
+                    IndexModel([("status", ASCENDING)], name="status_index"),
+                    IndexModel([("last_updated", DESCENDING)], name="last_updated_index")
+                ]
+                await self.db.embedding_status.create_indexes(embedding_status_indexes)
+                print("成功重建embedding_status集合索引")
+            else:
+                print("embedding_status集合索引已是最新状态，无需重建")
+        except Exception as e:
+            print(f"初始化embedding_status集合时出错: {e}")
+            # 记录错误但继续执行，不影响应用启动
 
     async def _create_indexes(self):
         """创建数据库索引"""
