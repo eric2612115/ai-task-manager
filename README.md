@@ -1,14 +1,14 @@
 # 任务管理系统 (Task Management System)
 
-基于FastAPI的任务管理系统后端，提供项目、任务、看板、冲刺等敏捷开发工具功能，同时支持GitHub和GitLab代码仓库的集成与管理。
+一个智能化任务管理平台，集成敏捷开发工具、Git代码仓库管理和基于RAG技术的智能对话功能，旨在提升开发团队协作效率和知识共享。
 
-## 系统概述
+## 项目愿景
 
-这是一个强大的任务管理系统后端，结合了两大核心功能：
-1. **敏捷项目管理**：全功能敏捷开发工具，支持任务跟踪、看板、冲刺规划等
-2. **Git代码仓库管理**：支持GitHub和GitLab集成，代码同步与浏览
-
-该系统适用于需要将代码管理与任务管理紧密结合的开发团队，提供API端点供前端应用调用。
+该系统旨在解决开发团队在项目管理过程中面临的关键挑战：
+1. **知识孤岛问题**：通过RAG技术和智能对话，让团队成员快速获取项目知识
+2. **协作效率瓶颈**：利用AI辅助提升跨角色协作效率和代码质量
+3. **上下文切换开销**：集成任务、代码和文档管理，减少工具切换成本
+4. **项目洞察不足**：提供AI驱动的项目健康度分析和优化建议
 
 ## 核心功能
 
@@ -30,6 +30,43 @@
 - **代码浏览**：浏览仓库文件和内容
 - **文档管理**：基于源代码生成和管理文档
 
+### RAG系统 (检索增强生成)
+
+基于先进的检索增强生成技术，提供智能代码和文档查询功能：
+
+#### 实现目标
+- **减少知识获取成本**：新团队成员可快速了解项目代码库
+- **提高开发效率**：通过精准上下文辅助解决技术难题
+- **促进知识共享**：将隐性知识转化为显性，便于传播
+- **提升代码质量**：提供基于代码库的最佳实践建议
+
+#### 特性
+- **智能语义搜索**：基于向量数据库的语义搜索
+- **多模型支持**：集成OpenAI、Anthropic、Google等多家LLM
+- **代码特化处理**：使用CodeBERT优化代码理解能力
+- **混合检索策略**：结合语义相似度和关键词匹配
+- **内容分块优化**：针对代码和文档的智能分块策略
+- **结果可视化**：高亮显示查询与内容的匹配部分
+
+### 多用户对话系统
+
+实时WebSocket通信框架，支持与项目代码库相关的智能对话：
+
+#### 实现目标
+- **降低沟通成本**：减少团队内部解释代码和文档的时间
+- **保留决策上下文**：对话历史可作为决策依据被保存和引用
+- **跨角色协作**：支持开发者、产品经理、测试人员等多角色交流
+- **自动化执行**：从对话中直接执行任务修改和文档更新
+
+#### 特性
+- **会话管理**：创建、获取、更新和删除对话会话
+- **消息处理**：实时消息发送、接收和编辑
+- **断线重连机制**：网络中断时自动恢复对话状态
+- **心跳检测**：确保连接稳定性
+- **多设备同步**：同一用户的多个设备可实时同步消息
+- **智能RAG模式**：LLM自动判断何时调用项目知识库
+- **对话隐私控制**：支持私有、团队和公开三种对话模式
+
 ## 技术栈
 
 - **Web框架**：FastAPI
@@ -38,6 +75,9 @@
 - **异步支持**：asyncio, aiohttp
 - **身份验证**：JWT, OAuth
 - **加密**：cryptography, bcrypt
+- **向量数据库**：ChromaDB
+- **嵌入模型**：CodeBERT, SentenceTransformer
+- **WebSocket**：Starlette
 - **文档**：Markdown, OpenAPI
 
 ## 安装与配置
@@ -68,6 +108,15 @@ MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=task_manager_db
 REDIS_URL=redis://localhost:6379
 ENCRYPTION_KEY=your-secure-encryption-key
+
+# RAG相关配置
+CHROMA_PERSIST_DIR="./chroma_db"
+CHROMA_COLLECTION_CODE="code_embeddings"
+CHROMA_COLLECTION_DOCS="doc_embeddings"
+CODEBERT_MODEL="microsoft/codebert-base"
+SENTENCE_TRANSFORMER_MODEL="all-MiniLM-L6-v2"
+LLM_PROVIDER="openai"
+OPENAI_API_KEY="your-openai-api-key"
 ```
 
 5. 启动服务器
@@ -82,7 +131,7 @@ http://localhost:8000/api/v1/docs
 
 ## API概览
 
-系统提供RESTful API端点，分为以下几类：
+系统提供RESTful API和WebSocket端点:
 
 ### 项目与任务管理
 - 项目 CRUD：`/api/v1/projects/`
@@ -99,10 +148,16 @@ http://localhost:8000/api/v1/docs
 ### Git仓库管理
 - 凭证管理：`/api/v1/git/credentials/`
 - 仓库管理：`/api/v1/git/repos/`
-  - 支持按项目(project_id)组织管理仓库
-  - 可通过project_id参数过滤特定项目的仓库
 - 代码浏览：`/api/v1/code/`
 - 文档管理：`/api/v1/docs/`
+
+### RAG与对话系统
+- 嵌入管理：`/api/v1/rag/embeddings/`
+- 语义搜索：`/api/v1/rag/search`
+- RAG查询：`/api/v1/rag/query`
+- RAG可视化：`/api/v1/rag/visualization/`
+- 对话管理：`/api/v1/conversations/`
+- WebSocket对话：`ws://localhost:8000/api/v1/ws/chat`
 
 ### 其他功能
 - 搜索功能：`/api/v1/search/`
@@ -110,20 +165,101 @@ http://localhost:8000/api/v1/docs
 - 附件管理：`/api/v1/attachments/`
 - 事件系统：`/api/v1/events/`
 
-## 安全与性能
+## 使用RAG系统
 
-- 所有Git令牌使用Fernet加密存储
-- API使用JWT进行身份验证和授权
-- 异步架构确保高性能和可扩展性
-- MongoDB和Redis为数据存储和缓存提供支持
+### 初始化嵌入向量
 
-## 开发计划
+```
+POST /api/v1/rag/embeddings/generate/{repo_id}
+{
+  "force_regenerate": false
+}
+```
 
-- AI辅助任务分析与文档生成
-- 代码质量分析集成
-- 更多Git平台支持（如Bitbucket）
-- 高级报表和数据可视化
-- 移动应用API扩展
+### 执行语义搜索
+
+```
+POST /api/v1/rag/search
+{
+  "query": "如何使用formatDate函数?",
+  "repo_id": "your-repo-id",
+  "limit": 5
+}
+```
+
+### 执行RAG查询
+
+```
+POST /api/v1/rag/query
+{
+  "query": "如何使用formatDate函数?",
+  "repo_id": "your-repo-id",
+  "include_code": true,
+  "include_docs": true
+}
+```
+
+### 获取RAG可视化数据
+
+```
+GET /api/v1/rag/visualization/message/{message_id}
+```
+
+## 对话系统使用
+
+### 创建会话
+
+```
+POST /api/v1/conversations/
+{
+  "title": "代码问答",
+  "project_id": "project-id",
+  "repo_id": "repo-id",
+  "settings": {
+    "model": "gemini-2.5-flash",
+    "temperature": 0.7
+  }
+}
+```
+
+### WebSocket连接
+
+```javascript
+// 建立连接
+const ws = new WebSocket('ws://localhost:8000/api/v1/ws/chat');
+
+// 发送消息
+ws.send(JSON.stringify({
+  "type": "message",
+  "conversation_id": "conversation-id",
+  "content": "如何实现用户认证功能?"
+}));
+
+// 接收消息
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data);
+};
+
+// 实现断线重连
+ws.onclose = () => {
+  setTimeout(() => {
+    const newWs = new WebSocket(
+      `ws://localhost:8000/api/v1/ws/chat?reconnect_token=${reconnectToken}`
+    );
+  }, 1000);
+};
+```
+
+## 未来发展计划
+
+- **AI辅助任务创建**：根据对话自动创建和分配任务
+- **代码质量分析与建议**：AI驱动的代码审查和优化
+- **自动文档生成**：从代码和对话中提取关键信息生成文档
+- **团队绩效分析**：基于活动数据的团队效能报告
+- **跨项目知识图谱**：构建组织级代码知识网络
+- **语音交互**：支持语音输入和输出
+- **多语言支持**：自动翻译对话内容
 
 ## 贡献
 
@@ -131,150 +267,4 @@ http://localhost:8000/api/v1/docs
 
 ## 许可证
 
-[指定许可证类型]
-
-## RAG 系統 (檢索增強生成)
-
-本項目集成了強大的RAG（檢索增強生成）系統，支持對代碼庫和文檔進行語義搜索和智能問答。
-
-### 特點
-
-- 使用ChromaDB作為向量數據庫
-- 使用CodeBERT處理代碼嵌入
-- 使用SentenceTransformer處理文檔嵌入
-- 支持多種LLM（OpenAI、Anthropic、Google）
-- 高效的代碼和文檔分塊策略
-- 多用戶WebSocket實時對話
-- RAG結果可視化與高亮顯示
-
-### 對話功能
-
-系統提供基於WebSocket的實時對話功能，支持以下特性：
-
-- 多用戶對話：支持多個用戶同時進行對話
-- 會話管理：創建、獲取、更新和刪除對話會話
-- 消息管理：發送、接收、編輯和刪除消息
-- 斷線重連：自動處理網絡中斷並恢復對話狀態
-- 實時更新：消息狀態變化即時推送
-- RAG結果可視化：高亮顯示檢索結果與查詢的匹配部分
-
-### RAG可視化
-
-RAG可視化功能讓用戶能夠：
-
-- 查看檢索到的代碼和文檔片段
-- 觀察相關性得分和排名
-- 高亮顯示查詢與內容的匹配部分
-- 直接訪問源文件
-- 分析不同類型文件的檢索分佈
-
-### 環境配置
-
-在`.env`文件中添加以下配置:
-
-```
-# ChromaDB 配置
-CHROMA_PERSIST_DIR="./chroma_db"
-CHROMA_COLLECTION_CODE="code_embeddings"
-CHROMA_COLLECTION_DOCS="doc_embeddings"
-
-# 模型配置
-CODEBERT_MODEL="microsoft/codebert-base"
-SENTENCE_TRANSFORMER_MODEL="all-MiniLM-L6-v2"
-
-# LLM 配置
-LLM_PROVIDER="openai"  # openai, anthropic, google
-OPENAI_API_KEY="your-openai-api-key"
-# 或者使用其他LLM提供商
-# ANTHROPIC_API_KEY="your-anthropic-api-key"
-# GOOGLE_API_KEY="your-google-api-key"
-```
-
-### 初始化向量數據庫
-
-ChromaDB 數據庫文件會在首次使用 RAG 功能時自動創建。如果需要手動初始化數據庫，請按照以下步驟操作:
-
-1. 確保已正確設置 `.env` 文件中的 `CHROMA_PERSIST_DIR` 變量
-2. 創建數據庫目錄（如果不存在）:
-   ```
-   mkdir -p ./chroma_db
-   ```
-3. 使用 API 導入倉庫數據並生成嵌入:
-   ```
-   POST /api/v1/rag/embeddings/generate/{repo_id}
-   {
-     "repo_id": "your-repo-id",
-     "force_regenerate": true
-   }
-   ```
-
-注意: 向量數據庫文件 (`chroma_db/`) 不會被包含在 Git 倉庫中，每個環境需要獨立初始化。
-
-### 使用方法
-
-1. 首先為倉庫生成嵌入:
-   ```
-   POST /api/v1/rag/embeddings/generate/{repo_id}
-   {
-     "repo_id": "your-repo-id",
-     "force_regenerate": false
-   }
-   ```
-
-2. 檢查嵌入生成狀態:
-   ```
-   GET /api/v1/rag/embeddings/status/{repo_id}
-   ```
-
-3. 執行語義搜索:
-   ```
-   POST /api/v1/rag/search
-   {
-     "query": "如何使用formatDate函數?",
-     "repo_id": "your-repo-id",
-     "limit": 5
-   }
-   ```
-
-4. 執行RAG查詢(生成回答):
-   ```
-   POST /api/v1/rag/query
-   {
-     "query": "如何使用formatDate函數?",
-     "repo_id": "your-repo-id",
-     "include_code": true,
-     "include_docs": true
-   }
-   ```
-
-5. 獲取RAG可視化數據:
-   ```
-   GET /api/v1/rag/visualization/message/{message_id}
-   ```
-
-6. 自定義高亮顯示:
-   ```
-   POST /api/v1/rag/visualization/highlight
-   {
-     "query": "如何使用formatDate函數?",
-     "context": "代碼或文檔內容",
-     "language": "javascript"
-   }
-   ```
-
-7. 使用WebSocket連接進行對話:
-   ```
-   WebSocket: ws://localhost:8000/api/v1/ws/chat
-   WebSocket: ws://localhost:8000/api/v1/ws/chat/{conversation_id}
-   ```
-
-8. 刪除倉庫嵌入:
-   ```
-   DELETE /api/v1/rag/embeddings/{repo_id}
-   ```
-
-### 已知限制
-
-- 目前RAG查詢需要配置有效的LLM API密鑰
-- 不支持的文件類型 (yaml, markdown, html) 將被跳過
-- 大型代碼庫的嵌入生成可能需要較長時間
+MIT许可证
