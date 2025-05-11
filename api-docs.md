@@ -1862,1267 +1862,603 @@ eventSource.onerror = (error) => {
 4. 文件上傳使用 `multipart/form-data` 格式。
 5. 日期時間格式使用 ISO 8601 (`YYYY-MM-DDTHH:MM:SSZ`)。
 
-## 默認路由
-
-### 根路徑
-
-```
-GET /
-```
-
-響應：
-```json
-{
-  "message": "Task Manager API is running"
-}
-```
-
-### 健康檢查
-
-```
-GET /health
-```
-
-響應：
-```json
-{
-  "status": "ok",
-  "version": "1.0.0",
-  "timestamp": "2023-07-12T12:00:00Z"
-}
-```
-
-## Git倉庫管理
-
-### 凭证管理
-
-#### 创建Git凭证
-
-```
-POST /git/credentials
-```
-
-请求体：
-```json
-{
-  "name": "GitHub账号",
-  "platform": "github",
-  "auth_type": "token",
-  "token": "ghp_xxxxxxxxxxxxxxxx",
-  "base_url": null
-}
-```
-
-注意：
-- `platform` 值必须为 "github" 或 "gitlab"
-- `auth_type` 值必须为 "token" 或 "oauth"，默认为 "token"
-- `base_url` 仅对 GitLab 企业版必填，否则可为 null
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "GitHub账号",
-    "platform": "github",
-    "auth_type": "token",
-    "token": "[加密后的token]",
-    "base_url": null,
-    "status": "active",
-    "last_validated": null,
-    "created_at": "2023-05-01T10:00:00Z",
-    "updated_at": "2023-05-01T10:00:00Z"
-  },
-  "message": "Credential created successfully"
-}
-```
-
-#### 获取所有Git凭证
-
-```
-GET /git/credentials
-```
-
-查询参数：
-- `skip` (可选): 分页跳过数量，默认为 0
-- `limit` (可选): 分页限制数量，默认为 100
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439011",
-      "name": "GitHub账号",
-      "platform": "github",
-      "auth_type": "token",
-      "token": "[加密后的token]",
-      "base_url": null,
-      "status": "active",
-      "last_validated": "2023-05-01T10:30:00Z",
-      "created_at": "2023-05-01T10:00:00Z",
-      "updated_at": "2023-05-01T10:30:00Z"
-    }
-  ],
-  "count": 1
-}
-```
-
-#### 获取单个Git凭证
-
-```
-GET /git/credentials/{credential_id}
-```
-
-路径参数：
-- `credential_id`: 凭证ID
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "GitHub账号",
-    "platform": "github",
-    "auth_type": "token",
-    "token": "[加密后的token]",
-    "base_url": null,
-    "status": "active",
-    "last_validated": "2023-05-01T10:30:00Z",
-    "created_at": "2023-05-01T10:00:00Z",
-    "updated_at": "2023-05-01T10:30:00Z"
-  }
-}
-```
-
-#### 更新Git凭证
-
-```
-PUT /git/credentials/{credential_id}
-```
-
-路径参数：
-- `credential_id`: 凭证ID
-
-请求体：
-```json
-{
-  "name": "GitHub个人账号",
-  "token": "ghp_yyyyyyyyyyyyyyyy",
-  "base_url": null,
-  "status": "active"
-}
-```
-
-注意：所有字段都是可选的，只有提供的字段才会被更新。
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "GitHub个人账号",
-    "platform": "github",
-    "auth_type": "token",
-    "token": "[加密后的新token]",
-    "base_url": null,
-    "status": "active",
-    "last_validated": null,
-    "created_at": "2023-05-01T10:00:00Z",
-    "updated_at": "2023-05-01T11:00:00Z"
-  },
-  "message": "Credential updated successfully"
-}
-```
-
-#### 删除Git凭证
-
-```
-DELETE /git/credentials/{credential_id}
-```
-
-路径参数：
-- `credential_id`: 凭证ID
-
-响应：
-```json
-{
-  "success": true,
-  "message": "Credential deleted successfully"
-}
-```
-
-#### 测试Git凭证连接
-
-```
-POST /git/credentials/{credential_id}/test
-```
-
-路径参数：
-- `credential_id`: 凭证ID
-
-响应：
-```json
-{
-  "success": true,
-  "connected": true,
-  "message": "Connection successful"
-}
-```
-
-#### 测试Git令牌有效性
-
-```
-POST /git/credentials/test-token
-```
-
-请求体：
-```json
-{
-  "platform": "github",
-  "token": "ghp_xxxxxxxxxxxxxxxx",
-  "base_url": null
-}
-```
-
-注意：
-- `platform` 值必须为 "github" 或 "gitlab"
-- `base_url` 仅对 GitLab 企业版必填，否则可为 null
-- 此API无需先创建凭证，可直接测试token有效性
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "valid": true,
-    "message": "Connection successful",
-    "user_info": {
-      "username": "your-username",
-      "name": "Your Name",
-      "email": "your.email@example.com",
-      "avatar_url": "https://avatars.githubusercontent.com/u/12345678"
-    }
-  }
-}
-```
-
-### 仓库管理
-
-#### 发现可访问的仓库
-
-```
-GET /git/repos/discover
-```
-
-查询参数：
-- `credential_id` (必填): 凭证ID
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "platform": "github",
-      "owner": "username",
-      "name": "repo-name",
-      "full_name": "username/repo-name",
-      "default_branch": "main",
-      "description": "项目描述",
-      "is_private": false,
-      "exists": false
-    },
-    {
-      "platform": "github",
-      "owner": "username",
-      "name": "another-repo",
-      "full_name": "username/another-repo",
-      "default_branch": "master",
-      "description": "另一个项目描述",
-      "is_private": true,
-      "exists": true,
-      "id": "507f1f77bcf86cd799439012"
-    }
-  ],
-  "count": 2
-}
-```
-
-#### 创建仓库记录
-
-```
-POST /git/repos
-```
-
-请求体：
-```json
-{
-  "credential_id": "507f1f77bcf86cd799439011",
-  "platform": "github",
-  "owner": "username",
-  "name": "repo-name",
-  "full_name": "username/repo-name",
-  "default_branch": "main",
-  "description": "项目描述",
-  "is_private": false,
-  "sync_branches": ["main", "develop"]
-}
-```
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439012",
-    "credential_id": "507f1f77bcf86cd799439011",
-    "platform": "github",
-    "owner": "username",
-    "name": "repo-name",
-    "full_name": "username/repo-name",
-    "default_branch": "main",
-    "description": "项目描述",
-    "is_private": false,
-    "sync_enabled": true,
-    "sync_branches": ["main", "develop"],
-    "sync_status": "pending",
-    "created_at": "2023-05-01T12:00:00Z",
-    "updated_at": "2023-05-01T12:00:00Z"
-  },
-  "message": "Repository created successfully"
-}
-```
-
-#### 获取所有仓库
-
-```
-GET /git/repos
-```
-
-查询参数：
-- `skip` (可选): 分页跳过数量，默认为 0
-- `limit` (可选): 分页限制数量，默认为 100
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439012",
-      "credential_id": "507f1f77bcf86cd799439011",
-      "platform": "github",
-      "owner": "username",
-      "name": "repo-name",
-      "full_name": "username/repo-name",
-      "default_branch": "main",
-      "description": "项目描述",
-      "is_private": false,
-      "sync_enabled": true,
-      "sync_branches": ["main", "develop"],
-      "sync_status": "completed",
-      "last_synced_at": "2023-05-01T12:30:00Z",
-      "last_commit_sha": "abcdef1234567890",
-      "created_at": "2023-05-01T12:00:00Z",
-      "updated_at": "2023-05-01T12:30:00Z",
-      "credential": {
-        "id": "507f1f77bcf86cd799439011",
-        "name": "GitHub个人账号",
-        "platform": "github",
-        "status": "active"
-      }
-    }
-  ],
-  "count": 1
-}
-```
-
-#### 获取单个仓库
-
-```
-GET /git/repos/{repo_id}
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439012",
-    "credential_id": "507f1f77bcf86cd799439011",
-    "platform": "github",
-    "owner": "username",
-    "name": "repo-name",
-    "full_name": "username/repo-name",
-    "default_branch": "main",
-    "description": "项目描述",
-    "is_private": false,
-    "sync_enabled": true,
-    "sync_branches": ["main", "develop"],
-    "sync_status": "completed",
-    "last_synced_at": "2023-05-01T12:30:00Z",
-    "last_commit_sha": "abcdef1234567890",
-    "created_at": "2023-05-01T12:00:00Z",
-    "updated_at": "2023-05-01T12:30:00Z",
-    "credential": {
-      "id": "507f1f77bcf86cd799439011",
-      "name": "GitHub个人账号",
-      "platform": "github",
-      "status": "active"
-    }
-  }
-}
-```
-
-#### 更新仓库
-
-```
-PUT /git/repos/{repo_id}
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-请求体：
-```json
-{
-  "default_branch": "master",
-  "sync_enabled": true,
-  "sync_branches": ["master", "develop", "feature/*"],
-  "description": "更新的项目描述"
-}
-```
-
-注意：所有字段都是可选的，只有提供的字段才会被更新。
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439012",
-    "credential_id": "507f1f77bcf86cd799439011",
-    "platform": "github",
-    "owner": "username",
-    "name": "repo-name",
-    "full_name": "username/repo-name",
-    "default_branch": "master",
-    "description": "更新的项目描述",
-    "is_private": false,
-    "sync_enabled": true,
-    "sync_branches": ["master", "develop", "feature/*"],
-    "sync_status": "completed",
-    "last_synced_at": "2023-05-01T12:30:00Z",
-    "last_commit_sha": "abcdef1234567890",
-    "created_at": "2023-05-01T12:00:00Z",
-    "updated_at": "2023-05-01T13:00:00Z"
-  },
-  "message": "Repository updated successfully"
-}
-```
-
-#### 删除仓库
-
-```
-DELETE /git/repos/{repo_id}
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-响应：
-```json
-{
-  "success": true,
-  "message": "Repository deleted successfully"
-}
-```
-
-### 同步操作
-
-#### 同步仓库
-
-```
-POST /git/repos/{repo_id}/sync
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-查询参数：
-- `sync_type` (可选): 同步类型，可以是 "full" 或 "incremental"，默认为 "full"
-
-响应：
-```json
-{
-  "success": true,
-  "message": "Repository synchronization (full) started",
-  "sync_status": "syncing"
-}
-```
-
-#### 获取仓库同步状态
-
-```
-GET /git/repos/{repo_id}/sync/status
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "sync_status": "completed",
-    "last_synced_at": "2023-05-01T13:30:00Z",
-    "latest_sync": {
-      "_id": "507f1f77bcf86cd799439013",
-      "repository_id": "507f1f77bcf86cd799439012",
-      "sync_type": "full",
-      "started_at": "2023-05-01T13:00:00Z",
-      "completed_at": "2023-05-01T13:30:00Z",
-      "status": "completed",
-      "files_processed": 120,
-      "files_added": 120,
-      "files_updated": 0,
-      "files_deleted": 0,
-      "to_commit": "abcdef1234567890"
-    }
-  }
-}
-```
-
-#### 获取仓库同步历史
-
-```
-GET /git/repos/{repo_id}/sync/history
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-查询参数：
-- `skip` (可选): 分页跳过数量，默认为 0
-- `limit` (可选): 分页限制数量，默认为 10
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439014",
-      "repository_id": "507f1f77bcf86cd799439012",
-      "sync_type": "incremental",
-      "started_at": "2023-05-02T10:00:00Z",
-      "completed_at": "2023-05-02T10:05:00Z",
-      "status": "completed",
-      "from_commit": "abcdef1234567890",
-      "to_commit": "fedcba0987654321",
-      "files_processed": 5,
-      "files_added": 2,
-      "files_updated": 3,
-      "files_deleted": 0
-    },
-    {
-      "_id": "507f1f77bcf86cd799439013",
-      "repository_id": "507f1f77bcf86cd799439012",
-      "sync_type": "full",
-      "started_at": "2023-05-01T13:00:00Z",
-      "completed_at": "2023-05-01T13:30:00Z",
-      "status": "completed",
-      "files_processed": 120,
-      "files_added": 120,
-      "files_updated": 0,
-      "files_deleted": 0,
-      "to_commit": "abcdef1234567890"
-    }
-  ],
-  "count": 2
-}
-```
-
-## 代码文件管理
-
-#### 获取仓库文件树结构
-
-```
-GET /code/repos/{repo_id}/tree
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-查询参数：
-- `include_deleted` (可选): 是否包含已删除的文件，默认为 false
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "name": "src",
-      "path": "src",
-      "type": "directory",
-      "children": [
-        {
-          "id": "507f1f77bcf86cd799439015",
-          "name": "main.js",
-          "path": "src/main.js",
-          "type": "file",
-          "language": "javascript",
-          "size": 1024,
-          "is_deleted": false
-        }
-      ]
-    },
-    {
-      "name": "README.md",
-      "path": "README.md",
-      "type": "file",
-      "language": "markdown",
-      "size": 512,
-      "is_deleted": false
-    }
-  ]
-}
-```
-
-#### 获取文件内容
-
-```
-GET /code/files/{file_id}
-```
-
-路径参数：
-- `file_id`: 文件ID
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439015",
-    "repository_id": "507f1f77bcf86cd799439012",
-    "file_path": "src/main.js",
-    "file_name": "main.js",
-    "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n",
-    "language": "javascript",
-    "size_bytes": 1024,
-    "line_count": 5,
-    "commit_sha": "fedcba0987654321",
-    "branch": "main",
-    "last_modified": "2023-05-02T10:05:00Z",
-    "author": "username",
-    "is_deleted": false,
-    "created_at": "2023-05-01T13:30:00Z",
-    "updated_at": "2023-05-02T10:05:00Z"
-  }
-}
-```
-
-#### 根据路径获取文件
-
-```
-GET /code/repos/{repo_id}/files
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-查询参数：
-- `path` (必填): 文件路径，相对于仓库根目录
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439015",
-    "repository_id": "507f1f77bcf86cd799439012",
-    "file_path": "src/main.js",
-    "file_name": "main.js",
-    "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n",
-    "language": "javascript",
-    "size_bytes": 1024,
-    "line_count": 5,
-    "commit_sha": "fedcba0987654321",
-    "branch": "main",
-    "last_modified": "2023-05-02T10:05:00Z",
-    "author": "username",
-    "is_deleted": false,
-    "created_at": "2023-05-01T13:30:00Z",
-    "updated_at": "2023-05-02T10:05:00Z"
-  }
-}
-```
-
-#### 获取文件版本历史
-
-```
-GET /code/files/{file_id}/versions
-```
-
-路径参数：
-- `file_id`: 文件ID
-
-查询参数：
-- `skip` (可选): 分页跳过数量，默认为 0
-- `limit` (可选): 分页限制数量，默认为 10
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439017",
-      "file_id": "507f1f77bcf86cd799439015",
-      "commit_sha": "fedcba0987654321",
-      "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n",
-      "diff": "@@ -1,4 +1,5 @@\n console.log('Hello, world!');\n \n function sayHello() {\n+  return 'Hello!';\n }\n",
-      "author": "username",
-      "commit_message": "Add return statement to sayHello function",
-      "committed_at": "2023-05-02T10:05:00Z",
-      "created_at": "2023-05-02T10:05:00Z"
-    },
-    {
-      "_id": "507f1f77bcf86cd799439016",
-      "file_id": "507f1f77bcf86cd799439015",
-      "commit_sha": "abcdef1234567890",
-      "content": "console.log('Hello, world!');\n\nfunction sayHello() {\n}\n",
-      "diff": null,
-      "author": "username",
-      "commit_message": "Initial commit",
-      "committed_at": "2023-05-01T13:30:00Z",
-      "created_at": "2023-05-01T13:30:00Z"
-    }
-  ],
-  "count": 2
-}
-```
-
-#### 搜索代码内容
-
-```
-POST /code/search
-```
-
-请求体：
-```json
-{
-  "repository_id": "507f1f77bcf86cd799439012",
-  "query": "function sayHello",
-  "file_extensions": [".js", ".ts"],
-  "limit": 50,
-  "skip": 0
-}
-```
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "507f1f77bcf86cd799439015",
-      "file_path": "src/main.js",
-      "file_name": "main.js",
-      "language": "javascript",
-      "matches": [
-        {
-          "start_line": 1,
-          "end_line": 5,
-          "match_line": 3,
-          "context": [
-            {
-              "line_number": 1,
-              "content": "console.log('Hello, world!');",
-              "is_match": false
-            },
-            {
-              "line_number": 2,
-              "content": "",
-              "is_match": false
-            },
-            {
-              "line_number": 3,
-              "content": "function sayHello() {",
-              "is_match": true
-            },
-            {
-              "line_number": 4,
-              "content": "  return 'Hello!';",
-              "is_match": false
-            },
-            {
-              "line_number": 5,
-              "content": "}",
-              "is_match": false
-            }
-          ]
-        }
-      ],
-      "score": 0.95
-    }
-  ],
-  "count": 1
-}
-```
-
-## 文档管理
-
-#### 创建文档
-
-```
-POST /docs
-```
-
-请求体：
-```json
-{
-  "repository_id": "507f1f77bcf86cd799439012",
-  "title": "项目文档",
-  "content": "# 项目文档\n\n这是一个示例文档。",
-  "path": "docs/README.md",
-  "tags": ["文档", "说明"]
-}
-```
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439018",
-    "repository_id": "507f1f77bcf86cd799439012",
-    "title": "项目文档",
-    "content": "# 项目文档\n\n这是一个示例文档。",
-    "path": "docs/README.md",
-    "tags": ["文档", "说明"],
-    "author_id": null,
-    "last_modified_by": null,
-    "is_deleted": false,
-    "created_at": "2023-05-03T10:00:00Z",
-    "updated_at": "2023-05-03T10:00:00Z"
-  },
-  "message": "Document created successfully"
-}
-```
-
-#### 获取文档列表
-
-```
-GET /docs
-```
-
-查询参数：
-- `repo_id` (可选): 仓库ID，用于筛选特定仓库的文档
-- `skip` (可选): 分页跳过数量，默认为 0
-- `limit` (可选): 分页限制数量，默认为 100
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439018",
-      "repository_id": "507f1f77bcf86cd799439012",
-      "title": "项目文档",
-      "content": "# 项目文档\n\n这是一个示例文档。",
-      "path": "docs/README.md",
-      "tags": ["文档", "说明"],
-      "author_id": null,
-      "last_modified_by": null,
-      "is_deleted": false,
-      "created_at": "2023-05-03T10:00:00Z",
-      "updated_at": "2023-05-03T10:00:00Z"
-    }
-  ],
-  "count": 1
-}
-```
-
-#### 获取单个文档
-
-```
-GET /docs/{doc_id}
-```
-
-路径参数：
-- `doc_id`: 文档ID
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439018",
-    "repository_id": "507f1f77bcf86cd799439012",
-    "title": "项目文档",
-    "content": "# 项目文档\n\n这是一个示例文档。",
-    "path": "docs/README.md",
-    "tags": ["文档", "说明"],
-    "author_id": null,
-    "last_modified_by": null,
-    "is_deleted": false,
-    "created_at": "2023-05-03T10:00:00Z",
-    "updated_at": "2023-05-03T10:00:00Z"
-  }
-}
-```
-
-#### 更新文档
-
-```
-PUT /docs/{doc_id}
-```
-
-路径参数：
-- `doc_id`: 文档ID
-
-查询参数：
-- `user_id` (可选): 更新用户ID
-
-请求体：
-```json
-{
-  "title": "更新的项目文档",
-  "content": "# 更新的项目文档\n\n这是一个更新后的示例文档。",
-  "path": "docs/README.md",
-  "tags": ["文档", "说明", "更新"],
-  "change_summary": "更新文档标题和内容"
-}
-```
-
-注意：所有字段都是可选的，只有提供的字段才会被更新。
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439018",
-    "repository_id": "507f1f77bcf86cd799439012",
-    "title": "更新的项目文档",
-    "content": "# 更新的项目文档\n\n这是一个更新后的示例文档。",
-    "path": "docs/README.md",
-    "tags": ["文档", "说明", "更新"],
-    "author_id": null,
-    "last_modified_by": "507f1f77bcf86cd799439011",
-    "is_deleted": false,
-    "created_at": "2023-05-03T10:00:00Z",
-    "updated_at": "2023-05-03T11:00:00Z"
-  },
-  "message": "Document updated successfully"
-}
-```
-
-#### 删除文档
-
-```
-DELETE /docs/{doc_id}
-```
-
-路径参数：
-- `doc_id`: 文档ID
-
-响应：
-```json
-{
-  "success": true,
-  "message": "Document deleted successfully"
-}
-```
-
-#### 获取文档版本历史
-
-```
-GET /docs/{doc_id}/versions
-```
-
-路径参数：
-- `doc_id`: 文档ID
-
-查询参数：
-- `skip` (可选): 分页跳过数量，默认为 0
-- `limit` (可选): 分页限制数量，默认为 20
-
-响应：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439020",
-      "doc_id": "507f1f77bcf86cd799439018",
-      "title": "更新的项目文档",
-      "content": "# 更新的项目文档\n\n这是一个更新后的示例文档。",
-      "edited_by": "507f1f77bcf86cd799439011",
-      "version_number": 2,
-      "change_summary": "更新文档标题和内容",
-      "created_at": "2023-05-03T11:00:00Z"
-    },
-    {
-      "_id": "507f1f77bcf86cd799439019",
-      "doc_id": "507f1f77bcf86cd799439018",
-      "title": "项目文档",
-      "content": "# 项目文档\n\n这是一个示例文档。",
-      "edited_by": null,
-      "version_number": 1,
-      "change_summary": null,
-      "created_at": "2023-05-03T10:00:00Z"
-    }
-  ],
-  "count": 2
-}
-```
-
-#### 获取指定版本的文档
-
-```
-GET /docs/{doc_id}/versions/{version_number}
-```
-
-路径参数：
-- `doc_id`: 文档ID
-- `version_number`: 版本号
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439019",
-    "doc_id": "507f1f77bcf86cd799439018",
-    "title": "项目文档",
-    "content": "# 项目文档\n\n这是一个示例文档。",
-    "edited_by": null,
-    "version_number": 1,
-    "change_summary": null,
-    "created_at": "2023-05-03T10:00:00Z"
-  }
-}
-```
-
-#### 生成文档
-
-```
-POST /docs/{repo_id}/generate
-```
-
-路径参数：
-- `repo_id`: 仓库ID
-
-请求体：
-```json
-{
-  "source_files": ["src/main.js", "README.md"],
-  "title": "API文档",
-  "target_format": "markdown",
-  "include_code": true,
-  "doc_type": "technical"
-}
-```
-
-响应：
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439021",
-    "repository_id": "507f1f77bcf86cd799439012",
-    "title": "API文档",
-    "content": "# Generated Documentation\n\n## src/main.js\n\n**Language**: javascript\n\n```\nconsole.log('Hello, world!');\n\nfunction sayHello() {\n  return 'Hello!';\n}\n```\n\n## README.md\n\n**Language**: markdown\n\n```\n# Example Project\n\nThis is an example project.\n```\n",
-    "path": null,
-    "tags": ["auto-generated", "technical"],
-    "author_id": null,
-    "last_modified_by": null,
-    "is_deleted": false,
-    "created_at": "2023-05-03T12:00:00Z",
-    "updated_at": "2023-05-03T12:00:00Z"
-  },
-  "message": "Document generated successfully"
-}
-```
-
 ## RAG系统
 
-RAG (Retrieval-Augmented Generation) 系统提供了基于代码库和文档的语义搜索和智能问答功能。
-
-### 嵌入管理
-
-#### 生成倉庫嵌入
+### 生成嵌入向量
 
 ```
 POST /rag/embeddings/generate/{repo_id}
 ```
 
-路徑參數:
-- `repo_id`: 代碼倉庫ID
+路径参数:
+- `repo_id`: 代码仓库ID
 
-請求體:
+请求体:
 ```json
 {
-  "repo_id": "681fc803c46e9e8569687ff6",
   "force_regenerate": false
 }
 ```
 
-響應:
+响应:
 ```json
 {
   "success": true,
-  "message": "Embedding generation started",
-  "status": "processing"
+  "message": "Embedding generation started successfully.",
+  "status": {
+    "repo_id": "60c72b2f9b1a8d001f3a0a1d",
+    "status": "processing",
+    "start_time": "2023-05-03T10:00:00Z",
+    "progress": 0.0,
+    "total_files": 0,
+    "processed_files": 0,
+    "errors": []
+  }
 }
 ```
 
-#### 獲取嵌入狀態
+### 查询嵌入状态
 
 ```
 GET /rag/embeddings/status/{repo_id}
 ```
 
-路徑參數:
-- `repo_id`: 代碼倉庫ID
+路径参数:
+- `repo_id`: 代码仓库ID
 
-響應:
-```json
-{
-  "repository_id": "681fc803c46e9e8569687ff6",
-  "status": "completed",
-  "code_progress": 1.0,
-  "docs_progress": 1.0,
-  "last_updated": "2023-10-23T15:45:30.123Z",
-  "total_code_files": 42,
-  "processed_code_files": 42,
-  "total_docs": 5,
-  "processed_docs": 5
-}
-```
-
-#### 刪除倉庫嵌入
-
-```
-DELETE /rag/embeddings/{repo_id}
-```
-
-路徑參數:
-- `repo_id`: 代碼倉庫ID
-
-響應:
+响应:
 ```json
 {
   "success": true,
-  "message": "Embeddings deleted"
+  "status": {
+    "repo_id": "60c72b2f9b1a8d001f3a0a1d",
+    "status": "completed",
+    "start_time": "2023-05-03T10:00:00Z",
+    "end_time": "2023-05-03T10:05:00Z",
+    "progress": 1.0,
+    "total_files": 120,
+    "processed_files": 120,
+    "failed_files": 2,
+    "code_chunks": 350,
+    "doc_chunks": 75,
+    "errors": []
+  }
 }
 ```
 
-### 搜索與查詢
-
-#### 语义搜索
+### 执行语义搜索
 
 ```
 POST /rag/search
 ```
 
-請求體:
+请求体:
 ```json
 {
-  "query": "如何使用formatDate函數?",
-  "repo_id": "681fc803c46e9e8569687ff6",
-  "collection": "both",
+  "query": "如何实现用户认证功能?",
+  "repo_id": "60c72b2f9b1a8d001f3a0a1d",
+  "collection": "all",
   "limit": 5,
-  "file_types": ["python", "javascript"]
+  "file_types": ["js", "py"]
 }
 ```
 
-參數說明:
-- `query`: 搜索查詢文本
-- `repo_id`: 代碼倉庫ID
-- `collection`: 搜索範圍，可選值: "code", "docs", "both" (默認)
-- `limit`: 返回結果數量限制
-- `file_types`: 可選的文件類型過濾器
-
-響應:
+响应:
 ```json
 {
   "success": true,
   "data": [
     {
-      "file_id": "60c72b2f9b1a8d001f3a0a1e",
-      "file_path": "utils/date_helpers.js",
-      "file_name": "date_helpers.js",
-      "content": "function formatDate(date, format = 'YYYY-MM-DD') {\n  // Implementation\n}",
+      "file_path": "src/auth/auth.js",
+      "file_name": "auth.js",
+      "content": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
+      "score": 0.85,
       "language": "javascript",
-      "score": 0.92,
       "type": "code",
       "metadata": {
-        "repo_id": "681fc803c46e9e8569687ff6",
-        "file_id": "60c72b2f9b1a8d001f3a0a1e",
-        "language": "javascript",
-        "chunk_index": 3,
-        "total_chunks": 12
+        "line_start": 45,
+        "line_end": 48
       }
+    },
+    {
+      "file_path": "docs/authentication.md",
+      "file_name": "authentication.md",
+      "content": "# 认证系统\n\n本系统使用JWT进行用户认证...",
+      "score": 0.82,
+      "language": null,
+      "type": "doc",
+      "metadata": {}
     }
   ],
-  "count": 1,
-  "query": "如何使用formatDate函數?"
+  "count": 2,
+  "query": "如何实现用户认证功能?"
 }
 ```
 
-#### RAG查詢(LLM回答)
+### 执行RAG查询
 
 ```
 POST /rag/query
 ```
 
-請求體:
+请求体:
 ```json
 {
-  "query": "如何使用formatDate函數?",
-  "repo_id": "681fc803c46e9e8569687ff6",
-  "context_limit": 3,
+  "query": "如何实现用户认证功能?",
+  "repo_id": "60c72b2f9b1a8d001f3a0a1d",
+  "context_limit": 5,
+  "llm_model": "gemini-2.5-flash",
+  "llm_provider": "google",
   "include_code": true,
-  "include_docs": true
+  "include_docs": true,
+  "temperature": 0.7,
+  "max_tokens": 1000
 }
 ```
 
-參數說明:
-- `query`: 問題或查詢文本
-- `repo_id`: 代碼倉庫ID
-- `context_limit`: 用於上下文的檢索結果數量
-- `include_code`: 是否包含代碼文件
-- `include_docs`: 是否包含文檔
-
-響應:
+响应:
 ```json
 {
   "success": true,
-  "answer": "formatDate函數用於將日期格式化為指定的字符串格式。它接受兩個參數：date（日期對象）和format（可選的格式字符串，默認為'YYYY-MM-DD'）。\n\n使用示例：\n```javascript\n// 格式化當前日期為 YYYY-MM-DD\nconst today = formatDate(new Date()); // 返回如 '2023-10-23'\n\n// 使用自定義格式\nconst formattedDate = formatDate(new Date(), 'MM/DD/YYYY'); // 返回如 '10/23/2023'\n```\n\n該函數位於utils/date_helpers.js文件中。",
-  "sources": [
-    {
-      "file_path": "utils/date_helpers.js",
-      "file_name": "date_helpers.js",
-      "language": "javascript",
-      "score": 0.92
-    }
-  ],
-  "query": "如何使用formatDate函數?"
+  "data": {
+    "answer": "在这个仓库中，用户认证功能使用JWT实现。主要代码位于`src/auth/auth.js`文件...",
+    "references": [
+      {
+        "file_path": "src/auth/auth.js",
+        "file_name": "auth.js",
+        "content": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
+        "score": 0.85,
+        "language": "javascript",
+        "type": "code",
+        "metadata": {
+          "line_start": 45,
+          "line_end": 48
+        }
+      }
+    ],
+    "model": "gemini-2.5-flash",
+    "provider": "google"
+  },
+  "query": "如何实现用户认证功能?"
 }
 ```
 
-注意: RAG查詢功能需要配置有效的LLM API密鑰才能使用。
+### 删除嵌入向量
+
+```
+DELETE /rag/embeddings/{repo_id}
+```
+
+路径参数:
+- `repo_id`: 代码仓库ID
+
+响应:
+```json
+{
+  "success": true,
+  "message": "Embeddings for repository 60c72b2f9b1a8d001f3a0a1d have been deleted successfully."
+}
+```
+
+### 获取消息可视化数据
+
+```
+GET /rag/visualization/message/{message_id}
+```
+
+路径参数:
+- `message_id`: 消息ID
+
+响应:
+```json
+{
+  "success": true,
+  "data": {
+    "sources": [
+      {
+        "id": 0,
+        "file_id": "60c72b2f9b1a8d001f3a0a2e",
+        "file_path": "src/auth/auth.js",
+        "file_name": "auth.js",
+        "content": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
+        "preview": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
+        "score": 0.85,
+        "language": "javascript",
+        "type": "code",
+        "metadata": {
+          "line_start": 45,
+          "line_end": 48
+        }
+      }
+    ],
+    "summary": {
+      "total_sources": 1,
+      "code_sources": 1,
+      "doc_sources": 0,
+      "avg_score": 0.85
+    },
+    "file_types": {
+      "javascript": 1
+    }
+  }
+}
+```
+
+### 高亮匹配内容
+
+```
+POST /rag/visualization/highlight
+```
+
+请求体:
+```json
+{
+  "query": "用户认证",
+  "context": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
+  "language": "javascript"
+}
+```
+
+响应:
+```json
+{
+  "success": true,
+  "data": {
+    "matched_lines": [
+      {
+        "line": 1,
+        "content": "function authenticate(username, password) {",
+        "matched_terms": ["认证"]
+      }
+    ],
+    "context_lines": [
+      {
+        "line": 1,
+        "content": "function authenticate(username, password) {",
+        "is_match": true
+      },
+      {
+        "line": 2,
+        "content": "  // 验证逻辑",
+        "is_match": false
+      },
+      {
+        "line": 3,
+        "content": "  return jwt.sign({ username }, SECRET_KEY);",
+        "is_match": false
+      }
+    ],
+    "has_highlights": true,
+    "language": "javascript"
+  }
+}
+```
+
+## 对话系统
+
+### 创建对话会话
+
+```
+POST /conversations/
+```
+
+请求体:
+```json
+{
+  "title": "代码问答",
+  "project_id": "60c72b2f9b1a8d001f3a0a1d",
+  "repo_id": "60c72b2f9b1a8d001f3a0a1e",
+  "settings": {
+    "model": "gemini-2.5-flash",
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "context_limit": 5,
+    "include_code": true,
+    "include_docs": true
+  }
+}
+```
+
+响应:
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "60c72b2f9b1a8d001f3a0a2f",
+    "user_id": "507f1f77bcf86cd799439011",
+    "title": "代码问答",
+    "created_at": "2023-05-03T10:00:00Z",
+    "last_message_at": "2023-05-03T10:00:00Z",
+    "message_count": 0,
+    "settings": {
+      "model": "gemini-2.5-flash",
+      "temperature": 0.7,
+      "max_tokens": 1000,
+      "context_limit": 5,
+      "include_code": true,
+      "include_docs": true
+    }
+  }
+}
+```
+
+### 获取对话会话列表
+
+```
+GET /conversations/
+```
+
+查询参数:
+- `skip` (可选): 分页跳过数量，默认为0
+- `limit` (可选): 分页限制数量，默认为20
+- `project_id` (可选): 按项目ID过滤
+
+响应:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "60c72b2f9b1a8d001f3a0a2f",
+      "user_id": "507f1f77bcf86cd799439011",
+      "title": "代码问答",
+      "created_at": "2023-05-03T10:00:00Z",
+      "last_message_at": "2023-05-03T10:00:00Z",
+      "message_count": 0
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 20
+}
+```
+
+### 获取单个对话会话
+
+```
+GET /conversations/{conversation_id}
+```
+
+路径参数:
+- `conversation_id`: 对话会话ID
+
+响应:
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "60c72b2f9b1a8d001f3a0a2f",
+    "user_id": "507f1f77bcf86cd799439011",
+    "title": "代码问答",
+    "created_at": "2023-05-03T10:00:00Z",
+    "last_message_at": "2023-05-03T10:00:00Z",
+    "message_count": 0,
+    "settings": {
+      "model": "gemini-2.5-flash",
+      "temperature": 0.7,
+      "max_tokens": 1000,
+      "context_limit": 5,
+      "include_code": true,
+      "include_docs": true
+    }
+  }
+}
+```
+
+### 获取会话消息列表
+
+```
+GET /conversations/{conversation_id}/messages
+```
+
+路径参数:
+- `conversation_id`: 对话会话ID
+
+查询参数:
+- `skip` (可选): 分页跳过数量，默认为0
+- `limit` (可选): 分页限制数量，默认为50
+- `sort_order` (可选): 排序顺序，可选值为"asc"或"desc"，默认为"asc"
+
+响应:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "60c72b2f9b1a8d001f3a0a30",
+      "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
+      "user_id": "507f1f77bcf86cd799439011",
+      "role": "user",
+      "content": "如何实现用户认证功能?",
+      "type": "text",
+      "status": "completed",
+      "created_at": "2023-05-03T10:01:00Z",
+      "references": []
+    },
+    {
+      "_id": "60c72b2f9b1a8d001f3a0a31",
+      "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
+      "user_id": "507f1f77bcf86cd799439011",
+      "role": "assistant",
+      "content": "在这个仓库中，用户认证功能使用JWT实现...",
+      "type": "text",
+      "status": "completed",
+      "created_at": "2023-05-03T10:01:05Z",
+      "references": [
+        {
+          "file_path": "src/auth/auth.js",
+          "file_name": "auth.js",
+          "content": "function authenticate(username, password) {...}",
+          "score": 0.85,
+          "language": "javascript",
+          "type": "code",
+          "metadata": {
+            "line_start": 45,
+            "line_end": 48
+          }
+        }
+      ]
+    }
+  ],
+  "total": 2,
+  "skip": 0,
+  "limit": 50
+}
+```
+
+### 在会话中创建消息
+
+```
+POST /conversations/{conversation_id}/messages
+```
+
+路径参数:
+- `conversation_id`: 对话会话ID
+
+请求体:
+```json
+{
+  "content": "如何实现用户认证功能?",
+  "type": "text",
+  "metadata": {}
+}
+```
+
+响应:
+```json
+{
+  "success": true,
+  "data": {
+    "user_message": {
+      "_id": "60c72b2f9b1a8d001f3a0a30",
+      "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
+      "user_id": "507f1f77bcf86cd799439011",
+      "role": "user",
+      "content": "如何实现用户认证功能?",
+      "type": "text",
+      "status": "completed",
+      "created_at": "2023-05-03T10:01:00Z",
+      "references": []
+    },
+    "ai_message_id": "60c72b2f9b1a8d001f3a0a31"
+  }
+}
+```
+
+### WebSocket对话API
+
+系统提供两个WebSocket端点用于实时对话:
+
+```
+WebSocket: ws://localhost:8000/api/v1/ws/chat
+WebSocket: ws://localhost:8000/api/v1/ws/chat/{conversation_id}
+```
+
+#### 连接参数
+
+- `token` (可选): 用户身份验证令牌
+- `conversation_id` (可选): 要加入的会话ID
+- `reconnect_token` (可选): 用于断线重连的令牌
+
+#### 客户端发送消息格式
+
+##### 心跳消息
+```json
+{
+  "type": "ping"
+}
+```
+
+##### 订阅会话
+```json
+{
+  "type": "subscribe",
+  "conversation_id": "60c72b2f9b1a8d001f3a0a2f"
+}
+```
+
+##### 发送新消息
+```json
+{
+  "type": "message",
+  "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
+  "content": "如何实现用户认证功能?",
+  "metadata": {}
+}
+```
+
+##### 编辑消息
+```json
+{
+  "type": "edit_message",
+  "message_id": "60c72b2f9b1a8d001f3a0a30",
+  "content": "如何使用JWT实现用户认证功能?"
+}
+```
+
+##### 正在输入指示
+```json
+{
+  "type": "typing",
+  "conversation_id": "60c72b2f9b1a8d001f3a0a2f"
+}
+```
+
+#### 服务器响应格式
+
+##### 连接成功
+```json
+{
+  "type": "connected",
+  "data": {
+    "connection_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": "507f1f77bcf86cd799439011",
+    "reconnect_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+##### 订阅成功
+```json
+{
+  "type": "subscribed",
+  "data": {
+    "conversation_id": "60c72b2f9b1a8d001f3a0a2f"
+  }
+}
+```
+
+##### 接收消息
+```json
+{
+  "type": "message",
+  "data": {
+    "_id": "60c72b2f9b1a8d001f3a0a30",
+    "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
+    "user_id": "507f1f77bcf86cd799439011",
+    "role": "user",
+    "content": "如何实现用户认证功能?",
+    "type": "text",
+    "status": "completed",
+    "created_at": "2023-05-03T10:01:00Z"
+  }
+}
+```
+
+##### 心跳响应
+```json
+{
+  "type": "pong",
+  "timestamp": 1620032460.0
+}
+```
+
+##### 错误消息
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Invalid JSON message"
+  }
+}
+```
