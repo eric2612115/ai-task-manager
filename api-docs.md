@@ -164,37 +164,112 @@ GET /search/
 查詢參數：
 - `q`: 搜尋關鍵字（必填）
 - `project_id` (可選): 限定在特定專案內搜尋
-- `target_types` (可選): 限定搜尋的實體類型，例如: task, comment, project
+- `target_types` (可選): 限定搜尋的實體類型，例如: task, comment, project, sprint, board, tag, doc, repo，多個類型用逗號分隔
+- `search_type` (可選): 搜尋類型，可選值: keyword(默認), semantic, hybrid
 - `skip` (可選): 分頁跳過數量，默認為 0
 - `limit` (可選): 分頁限制數量，默認為 50，最大為 200
+
+##### 搜索類型說明
+- `keyword`: 基於關鍵詞的傳統搜索，使用正則表達式匹配
+- `semantic`: 基於語義的搜索，使用向量嵌入進行相似度匹配（僅對任務有效）
+- `hybrid`: 同時使用關鍵詞和語義搜索，並合併結果
+
+##### 特殊搜索前綴
+系統支持以下特殊搜索前綴:
+- `recent:` - 搜索最近更新的內容（預留功能，待實現）
+- 更多特殊前綴將在未來版本中添加
+
+##### 搜索示例
+
+1. 基本關鍵詞搜索：
+```
+GET /search/?q=test&search_type=keyword&limit=20
+```
+
+2. 在特定項目中搜索：
+```
+GET /search/?q=lala&project_id=681d5a006a50a00d67339f9d&limit=20
+```
+
+3. 限定搜索類型：
+```
+GET /search/?q=planning&target_types=task,sprint&limit=20
+```
+
+4. 搜索文檔：
+```
+GET /search/?q=documentation&target_types=doc&limit=20
+```
+
+5. 搜索代碼庫：
+```
+GET /search/?q=chunker&target_types=repo&limit=20
+```
+
+6. 語義搜索：
+```
+GET /search/?q=AI%20and%20machine%20learning&search_type=semantic&limit=20
+```
+
+7. 混合搜索：
+```
+GET /search/?q=AI%20and%20machine%20learning&search_type=hybrid&limit=20
+```
 
 響應：
 ```json
 [
   {
     "type": "task",
-    "id": "60c72b2f9b1a8d001f3a0a1e",
-    "score": 0.95,
-    "highlight": "修復登入頁面的bug",
+    "id": "682210d84870d5c1ec9de763",
+    "score": 0.8,
+    "highlight": "測試語義搜索功能",
     "data": {
-      "summary": "修復登入頁面的bug",
-      "status": "In Progress",
-      "project_id": "60c72b2f9b1a8d001f3a0a1d"
-    }
+      "summary": "測試語義搜索功能",
+      "status": "pending",
+      "project_id": "681d5a006a50a00d67339f9d",
+      "tags": ["test", "semantic-search"]
+    },
+    "navigation": {},
+    "metadata": {}
   },
   {
-    "type": "comment",
-    "id": "60c72b2f9b1a8d001f3a0a1f",
-    "score": 0.8,
-    "highlight": "我已經檢查了代碼，問題出在...",
+    "type": "project",
+    "id": "681d5a006a50a00d67339f9d",
+    "score": 0.7,
+    "highlight": "eric-test",
     "data": {
-      "task_id": "60c72b2f9b1a8d001f3a0a1e",
-      "author_id": "507f1f77bcf86cd799439011",
-      "task_summary": "修復登入頁面的bug"
-    }
+      "name": "eric-test",
+      "description": "1234"
+    },
+    "navigation": {},
+    "metadata": {}
+  },
+  {
+    "type": "sprint",
+    "id": "68217d28ece5333b619faa3a",
+    "score": 0.5,
+    "highlight": "aaaa",
+    "data": {
+      "name": "aaaa",
+      "state": "planning",
+      "project_id": "681d5a006a50a00d67339f9d"
+    },
+    "navigation": {},
+    "metadata": {}
   }
 ]
 ```
+
+##### 返回數據格式
+所有搜索結果以統一的格式返回，包含以下字段:
+- `type`: 實體類型 (task, project, sprint, board, tag, comment)
+- `id`: 實體ID
+- `score`: 相關性分數 (0-1之間的浮點數)
+- `highlight`: 高亮顯示的文本
+- `data`: 實體數據，根據類型不同而有不同的字段
+- `navigation`: 導航相關信息（可選）
+- `metadata`: 元數據信息（可選）
 
 ### 事件
 

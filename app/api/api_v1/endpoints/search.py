@@ -5,6 +5,7 @@ from bson import ObjectId
 
 from app.db.mongodb import mongodb
 from app.models.other_models import SearchResult
+from app.services.task_embedding_service import task_embedding_service
 
 router = APIRouter()
 
@@ -19,12 +20,14 @@ async def search(
     q: str = Query(..., min_length=1, description="搜尋關鍵字"),
     project_id: Optional[str] = None,
     target_types: Optional[List[str]] = Query(None, description="限定搜尋的實體類型，例如: task, comment, project"),
+    search_type: Optional[str] = Query("keyword", description="搜尋類型: keyword, semantic, hybrid"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     current_user_id: str = Depends(get_current_user_id)
 ):
     """
-    全文搜尋 Projects, Tasks, Comments, Sprints, Boards, Tags, Relationships, Attachments。
+    全文搜尋 Projects, Tasks, Comments, Sprints, Boards, Tags, Relationships, Attachments, Docs, Repos。
+    支持关键词搜索和语义搜索。
     """
     try:
         # 驗證 project_id 格式
@@ -34,7 +37,7 @@ async def search(
         # 驗證 target_types 是否為支持的類型
         valid_types = [
             "project", "task", "comment", "sprint", "board", 
-            "tag", "relationship", "attachment"
+            "tag", "relationship", "attachment", "doc", "repo"
         ]
         
         if target_types:
@@ -52,30 +55,51 @@ async def search(
         # 收集所有搜尋結果
         all_results = []
         
-        # 在每個指定的集合中搜尋
-        if "project" in target_types:
-            project_results = await search_projects(q, project_id, skip, limit)
-            all_results.extend(project_results)
-            
-        if "task" in target_types:
-            task_results = await search_tasks(q, project_id, skip, limit)
-            all_results.extend(task_results)
-            
-        if "comment" in target_types:
-            comment_results = await search_comments(q, project_id, skip, limit)
-            all_results.extend(comment_results)
-            
-        if "sprint" in target_types:
-            sprint_results = await search_sprints(q, project_id, skip, limit)
-            all_results.extend(sprint_results)
-            
-        if "board" in target_types:
-            board_results = await search_boards(q, project_id, skip, limit)
-            all_results.extend(board_results)
-            
-        if "tag" in target_types:
-            tag_results = await search_tags(q, skip, limit)
-            all_results.extend(tag_results)
+        # 根据搜索类型执行不同的搜索
+        if search_type == "semantic" or search_type == "hybrid":
+            # 执行语义搜索（仅对任务）
+            if "task" in target_types:
+                semantic_results = await task_embedding_service.semantic_search_tasks(
+                    query=q,
+                    project_id=project_id,
+                    limit=limit
+                )
+                all_results.extend(semantic_results)
+        
+        # 如果是关键词搜索或混合搜索，执行传统搜索
+        if search_type == "keyword" or search_type == "hybrid":
+            # 在每個指定的集合中搜尋
+            if "project" in target_types:
+                project_results = await search_projects(q, project_id, skip, limit)
+                all_results.extend(project_results)
+                
+            if "task" in target_types and search_type != "hybrid":  # 混合搜索时已经通过语义搜索获取了任务
+                task_results = await search_tasks(q, project_id, skip, limit)
+                all_results.extend(task_results)
+                
+            if "comment" in target_types:
+                comment_results = await search_comments(q, project_id, skip, limit)
+                all_results.extend(comment_results)
+                
+            if "sprint" in target_types:
+                sprint_results = await search_sprints(q, project_id, skip, limit)
+                all_results.extend(sprint_results)
+                
+            if "board" in target_types:
+                board_results = await search_boards(q, project_id, skip, limit)
+                all_results.extend(board_results)
+                
+            if "tag" in target_types:
+                tag_results = await search_tags(q, skip, limit)
+                all_results.extend(tag_results)
+                
+            if "doc" in target_types:
+                doc_results = await search_docs(q, project_id, skip, limit)
+                all_results.extend(doc_results)
+                
+            if "repo" in target_types:
+                repo_results = await search_repos(q, project_id, skip, limit)
+                all_results.extend(repo_results)
         
         # 按相關性分數排序
         all_results.sort(key=lambda x: x["score"], reverse=True)
@@ -102,27 +126,28 @@ async def search(
 
 async def search_projects(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
     """搜尋專案"""
-    # 構建搜尋查詢
-    search_query = {"$text": {"$search": q}}
+    # 構建搜尋查詢 - 使用正則表達式而非文本搜索
+    search_query = {
+        "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}},
+            {"methodology": {"$regex": q, "$options": "i"}}
+        ]
+    }
     
     # 如果指定了 project_id，則只搜尋該專案
     if project_id:
         search_query["_id"] = ObjectId(project_id)
     
-    # 執行聚合查詢
-    pipeline = [
-        {"$match": search_query},
-        {"$project": {
-            "score": {"$meta": "textScore"},
+    # 執行查詢
+    cursor = mongodb.db.projects.find(
+        search_query,
+        {
             "name": 1,
-            "description": 1
-        }},
-        {"$sort": {"score": -1}},
-        {"$skip": skip},
-        {"$limit": limit}
-    ]
-    
-    cursor = mongodb.db.projects.aggregate(pipeline)
+            "description": 1,
+            "methodology": 1
+        }
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit)
     
     results = []
     async for doc in cursor:
@@ -131,10 +156,17 @@ async def search_projects(q: str, project_id: Optional[str], skip: int, limit: i
         if len(highlight) > 100:
             highlight = highlight[:97] + "..."
         
+        # 計算簡單的相關性分數
+        score = 0.5  # 基礎分數
+        if q.lower() in doc.get("name", "").lower():
+            score += 0.3
+        if q.lower() in doc.get("description", "").lower():
+            score += 0.2
+        
         results.append({
             "type": "project",
             "id": doc["_id"],
-            "score": doc["score"],
+            "score": score,
             "highlight": highlight,
             "data": {
                 "name": doc.get("name"),
@@ -146,55 +178,79 @@ async def search_projects(q: str, project_id: Optional[str], skip: int, limit: i
 
 async def search_tasks(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
     """搜尋任務"""
-    # 構建搜尋查詢
-    search_query = {"$text": {"$search": q}}
+    # 構建搜尋查詢 - 使用正則表達式而非文本搜索
+    search_query = {
+        "$or": [
+            {"summary": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}},
+            {"status": {"$regex": q, "$options": "i"}},
+            {"mermaid_syntax": {"$regex": q, "$options": "i"}}
+        ]
+    }
+    
+    # 對於標籤，我們需要特殊處理
+    # 如果標籤是數組，我們需要檢查數組中的每個元素
+    tag_query = {"tags": {"$regex": q, "$options": "i"}}
+    search_query["$or"].append(tag_query)
+    
+    print(f"API search_tasks - query: {q}, project_id: {project_id}")
+    print(f"API search_tasks - search_query: {search_query}")
     
     # 如果指定了 project_id，則只搜尋該專案下的任務
     if project_id:
         search_query["project_id"] = ObjectId(project_id)
     
-    # 執行聚合查詢
-    pipeline = [
-        {"$match": search_query},
-        {"$project": {
-            "score": {"$meta": "textScore"},
+    # 執行查詢
+    cursor = mongodb.db.tasks.find(
+        search_query,
+        {
             "summary": 1,
             "description": 1,
             "status": 1,
-            "project_id": 1
-        }},
-        {"$sort": {"score": -1}},
-        {"$skip": skip},
-        {"$limit": limit}
-    ]
-    
-    cursor = mongodb.db.tasks.aggregate(pipeline)
+            "project_id": 1,
+            "tags": 1
+        }
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit)
     
     results = []
+    count = 0
     async for doc in cursor:
+        count += 1
         # 提取高亮文本
         highlight = doc.get("summary", "")
         if len(highlight) > 100:
             highlight = highlight[:97] + "..."
         
+        # 計算簡單的相關性分數
+        # 如果查詢詞出現在摘要中，給予較高的分數
+        score = 0.5  # 基礎分數
+        if q.lower() in doc.get("summary", "").lower():
+            score += 0.3
+        if doc.get("tags") and any(q.lower() in tag.lower() for tag in doc.get("tags", [])):
+            score += 0.2
+        
         results.append({
             "type": "task",
             "id": doc["_id"],
-            "score": doc["score"],
+            "score": score,
             "highlight": highlight,
             "data": {
                 "summary": doc.get("summary"),
                 "status": doc.get("status"),
-                "project_id": str(doc.get("project_id"))
+                "project_id": str(doc.get("project_id")),
+                "tags": doc.get("tags", [])
             }
         })
     
+    print(f"API search_tasks - Found {count} tasks matching query: {q}")
     return results
 
 async def search_comments(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
     """搜尋評論"""
-    # 構建搜尋查詢
-    search_query = {"$text": {"$search": q}}
+    # 構建搜尋查詢 - 使用正則表達式而非文本搜索
+    search_query = {
+        "content": {"$regex": q, "$options": "i"}
+    }
     
     # 如果指定了 project_id，需要先獲取該專案下的所有任務ID
     if project_id:
@@ -210,21 +266,15 @@ async def search_comments(q: str, project_id: Optional[str], skip: int, limit: i
             # 如果專案下沒有任務，則返回空結果
             return []
     
-    # 執行聚合查詢
-    pipeline = [
-        {"$match": search_query},
-        {"$project": {
-            "score": {"$meta": "textScore"},
+    # 執行查詢
+    cursor = mongodb.db.comments.find(
+        search_query,
+        {
             "content": 1,
             "task_id": 1,
             "author_id": 1
-        }},
-        {"$sort": {"score": -1}},
-        {"$skip": skip},
-        {"$limit": limit}
-    ]
-    
-    cursor = mongodb.db.comments.aggregate(pipeline)
+        }
+    ).sort([("created_at", -1)]).skip(skip).limit(limit)
     
     results = []
     async for doc in cursor:
@@ -243,10 +293,15 @@ async def search_comments(q: str, project_id: Optional[str], skip: int, limit: i
                 {"summary": 1, "project_id": 1}
             )
         
+        # 計算簡單的相關性分數
+        score = 0.5  # 基礎分數
+        if q.lower() in content_text.lower():
+            score += 0.3
+        
         results.append({
             "type": "comment",
             "id": doc["_id"],
-            "score": doc["score"],
+            "score": score,
             "highlight": highlight,
             "data": {
                 "task_id": str(doc.get("task_id")),
@@ -260,35 +315,44 @@ async def search_comments(q: str, project_id: Optional[str], skip: int, limit: i
 
 async def search_sprints(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
     """搜尋衝刺"""
-    # 構建搜尋查詢
-    search_query = {"$text": {"$search": q}}
+    # 構建搜尋查詢 - 使用正則表達式而非文本搜索
+    search_query = {
+        "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"state": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}}
+        ]
+    }
     
     # 如果指定了 project_id，則只搜尋該專案下的衝刺
     if project_id:
         search_query["project_id"] = ObjectId(project_id)
     
-    # 執行聚合查詢
-    pipeline = [
-        {"$match": search_query},
-        {"$project": {
-            "score": {"$meta": "textScore"},
+    # 執行查詢
+    cursor = mongodb.db.sprints.find(
+        search_query,
+        {
             "name": 1,
             "state": 1,
-            "project_id": 1
-        }},
-        {"$sort": {"score": -1}},
-        {"$skip": skip},
-        {"$limit": limit}
-    ]
-    
-    cursor = mongodb.db.sprints.aggregate(pipeline)
+            "project_id": 1,
+            "start_date": 1,
+            "end_date": 1
+        }
+    ).sort([("start_date", -1)]).skip(skip).limit(limit)
     
     results = []
     async for doc in cursor:
+        # 計算簡單的相關性分數
+        score = 0.5  # 基礎分數
+        if q.lower() in doc.get("name", "").lower():
+            score += 0.3
+        if q.lower() in doc.get("state", "").lower():
+            score += 0.2
+            
         results.append({
             "type": "sprint",
             "id": doc["_id"],
-            "score": doc["score"],
+            "score": score,
             "highlight": doc.get("name", ""),
             "data": {
                 "name": doc.get("name"),
@@ -301,35 +365,43 @@ async def search_sprints(q: str, project_id: Optional[str], skip: int, limit: in
 
 async def search_boards(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
     """搜尋看板"""
-    # 構建搜尋查詢
-    search_query = {"$text": {"$search": q}}
+    # 構建搜尋查詢 - 使用正則表達式而非文本搜索
+    search_query = {
+        "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"type": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}}
+        ]
+    }
     
     # 如果指定了 project_id，則只搜尋該專案下的看板
     if project_id:
         search_query["project_id"] = ObjectId(project_id)
     
-    # 執行聚合查詢
-    pipeline = [
-        {"$match": search_query},
-        {"$project": {
-            "score": {"$meta": "textScore"},
+    # 執行查詢
+    cursor = mongodb.db.boards.find(
+        search_query,
+        {
             "name": 1,
             "type": 1,
-            "project_id": 1
-        }},
-        {"$sort": {"score": -1}},
-        {"$skip": skip},
-        {"$limit": limit}
-    ]
-    
-    cursor = mongodb.db.boards.aggregate(pipeline)
+            "project_id": 1,
+            "description": 1
+        }
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit)
     
     results = []
     async for doc in cursor:
+        # 計算簡單的相關性分數
+        score = 0.5  # 基礎分數
+        if q.lower() in doc.get("name", "").lower():
+            score += 0.3
+        if q.lower() in doc.get("type", "").lower():
+            score += 0.2
+            
         results.append({
             "type": "board",
             "id": doc["_id"],
-            "score": doc["score"],
+            "score": score,
             "highlight": doc.get("name", ""),
             "data": {
                 "name": doc.get("name"),
@@ -361,6 +433,140 @@ async def search_tags(q: str, skip: int, limit: int) -> List[dict]:
             "data": {
                 "name": doc.get("name"),
                 "usage_count": doc.get("usage_count", 0)
+            }
+        })
+    
+    return results
+
+async def search_docs(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
+    """搜尋文檔"""
+    # 構建搜尋查詢 - 使用正則表達式
+    search_query = {
+        "$or": [
+            {"title": {"$regex": q, "$options": "i"}},
+            {"content": {"$regex": q, "$options": "i"}},
+            {"path": {"$regex": q, "$options": "i"}},
+            {"tags": {"$regex": q, "$options": "i"}}
+        ],
+        "is_deleted": False  # 只搜索未删除的文档
+    }
+    
+    # 如果指定了 project_id，則只搜尋該專案下的文檔
+    if project_id:
+        search_query["project_id"] = ObjectId(project_id)
+    
+    # 執行查詢
+    cursor = mongodb.db.project_documentations.find(
+        search_query,
+        {
+            "title": 1,
+            "content": 1,
+            "path": 1,
+            "project_id": 1,
+            "tags": 1,
+            "created_at": 1,
+            "updated_at": 1
+        }
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit)
+    
+    results = []
+    async for doc in cursor:
+        # 提取高亮文本
+        highlight = doc.get("title", "")
+        if len(highlight) > 100:
+            highlight = highlight[:97] + "..."
+        
+        # 計算簡單的相關性分數
+        score = 0.5  # 基礎分數
+        if q.lower() in doc.get("title", "").lower():
+            score += 0.3
+        if q.lower() in doc.get("content", "").lower():
+            score += 0.2
+        
+        # 提取文檔内容的一小部分作為摘要
+        content = doc.get("content", "")
+        # 簡單去除HTML標籤
+        import re
+        content_text = re.sub(r'<[^>]+>', '', content)
+        summary = content_text[:200] + "..." if len(content_text) > 200 else content_text
+        
+        results.append({
+            "type": "doc",
+            "id": doc["_id"],
+            "score": score,
+            "highlight": highlight,
+            "data": {
+                "title": doc.get("title"),
+                "summary": summary,
+                "path": doc.get("path"),
+                "project_id": str(doc.get("project_id")),
+                "tags": doc.get("tags", []),
+                "updated_at": doc.get("updated_at")
+            }
+        })
+    
+    return results
+
+async def search_repos(q: str, project_id: Optional[str], skip: int, limit: int) -> List[dict]:
+    """搜尋代碼庫"""
+    # 構建搜尋查詢 - 使用正則表達式
+    search_query = {
+        "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"full_name": {"$regex": q, "$options": "i"}},
+            {"owner": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}}
+        ]
+    }
+    
+    # 如果指定了 project_id，則只搜尋該專案下的代碼庫
+    if project_id:
+        search_query["project_id"] = ObjectId(project_id)
+    
+    # 執行查詢
+    cursor = mongodb.db.repositories.find(
+        search_query,
+        {
+            "name": 1,
+            "full_name": 1,
+            "owner": 1,
+            "description": 1,
+            "project_id": 1,
+            "platform": 1,
+            "default_branch": 1,
+            "is_private": 1,
+            "last_synced_at": 1
+        }
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit)
+    
+    results = []
+    async for doc in cursor:
+        # 提取高亮文本
+        highlight = doc.get("full_name", "")
+        
+        # 計算簡單的相關性分數
+        score = 0.5  # 基礎分數
+        if q.lower() in doc.get("name", "").lower():
+            score += 0.3
+        if q.lower() in doc.get("full_name", "").lower():
+            score += 0.2
+        if q.lower() in doc.get("description", "").lower():
+            score += 0.1
+        
+        results.append({
+            "type": "repo",
+            "id": doc["_id"],
+            "score": score,
+            "highlight": highlight,
+            "data": {
+                "name": doc.get("name"),
+                "full_name": doc.get("full_name"),
+                "owner": doc.get("owner"),
+                "description": doc.get("description"),
+                "project_id": str(doc.get("project_id")) if doc.get("project_id") else None,
+                "platform": doc.get("platform"),
+                "is_private": doc.get("is_private", False),
+                "last_synced_at": doc.get("last_synced_at")
             }
         })
     
