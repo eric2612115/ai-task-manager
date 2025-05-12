@@ -1,16 +1,22 @@
-from datetime import datetime
-from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any, Union
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, File, UploadFile, Form
 from pymongo import ReturnDocument
 from starlette.status import HTTP_201_CREATED, HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST, HTTP_409_CONFLICT, HTTP_500_INTERNAL_SERVER_ERROR
 from bson import ObjectId
 import os
+import json
+import asyncio
 
 from app.db.mongodb import mongodb
 from app.db.redis import redis_manager
 from app.models.task_models import Task, TaskCreate, TaskUpdate, TaskMove
 from app.models.other_models import ActivityLogEntry
-from app.services.activity_log_service import create_activity_log
+from app.services.activity_log_service import create_activity_log, ACTIVITY_TYPES, TARGET_TYPES
+from app.services.task_embedding_service import task_embedding_service
+from app.services.notification_service import create_notification, NOTIFICATION_TYPES
+from app.core.custom_json import CustomJSONEncoder
+from app.api.api_v1.endpoints.relationships import validate_task_relationships, WORKING_STATUSES
 
 router = APIRouter()
 
@@ -172,6 +178,13 @@ async def create_task(
                 "status": task_data.status
             }
         )
+        
+        # 異步生成任務嵌入向量
+        asyncio.create_task(task_embedding_service.generate_task_embedding(
+            task_id=str(result.inserted_id),
+            summary=task_data.summary,
+            description=task_data.description
+        ))
         
         # 如果任務被指派了，創建通知
         if task_data.assignee_id:
@@ -381,6 +394,16 @@ async def update_task(
                         detail=f"Status transition from '{task['status']}' to '{task_data.status}' is not allowed by workflow rules"
                     )
             
+            # 检查任务关系约束
+            if task_data.status in WORKING_STATUSES:
+                validation_result = await validate_task_relationships(task_id, task_data.status)
+                if not validation_result["valid"]:
+                    blocking_task_names = [task["summary"] for task in validation_result["blocking_tasks"]]
+                    raise HTTPException(
+                        status_code=HTTP_400_BAD_REQUEST,
+                        detail=f"任务无法开始工作，因为它被以下任务阻塞: {', '.join(blocking_task_names)}"
+                    )
+            
             update_data["status"] = task_data.status
             changes["status"] = {"old": task["status"], "new": task_data.status}
         
@@ -483,7 +506,10 @@ async def update_task(
         
         if task_data.due_date is not None and task_data.due_date != task.get("due_date"):
             update_data["due_date"] = task_data.due_date
-            changes["due_date"] = {"old": task.get("due_date"), "new": task_data.due_date}
+            changes["due_date"] = {
+                "old": task.get("due_date").strftime("%Y-%m-%dT%H:%M:%S.%fZ") if task.get("due_date") else None,
+                "new": task_data.due_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            }
         
         if task_data.mermaid_syntax is not None and task_data.mermaid_syntax != task.get("mermaid_syntax"):
             update_data["mermaid_syntax"] = task_data.mermaid_syntax
@@ -536,13 +562,21 @@ async def update_task(
             details=changes
         )
         
+        # 如果摘要或描述发生了变化，重新生成嵌入向量
+        if "summary" in changes or "description" in changes:
+            asyncio.create_task(task_embedding_service.generate_task_embedding(
+                task_id=task_id,
+                summary=updated_task["summary"],
+                description=updated_task.get("description", "")
+            ))
+        
         # 處理特定更新類型的活動日誌和通知
-        # 如果狀態改變，記錄狀態變更活動
+        # 如果狀態改變，記錄狀態變更活動和通知
         if "status" in changes:
             await create_activity_log(
                 user_id=current_user_id,
-                action_type="status_changed",
-                target_type="task",
+                action_type=ACTIVITY_TYPES["TASK_STATUS_CHANGED"],
+                target_type=TARGET_TYPES["TASK"],
                 target_id=task_id,
                 project_id=str(task["project_id"]),
                 details={"status": changes["status"]}
@@ -550,23 +584,26 @@ async def update_task(
             
             # 通知任務的報告人
             if str(task["reporter_id"]) != current_user_id:
-                await mongodb.db.notifications.insert_one({
-                    "recipient_id": task["reporter_id"],
-                    "sender_id": ObjectId(current_user_id),
-                    "type": "status_changed",
-                    "message": f"任務 '{task['summary']}' 的狀態已從 '{changes['status']['old']}' 變更為 '{changes['status']['new']}'",
-                    "target_type": "task",
-                    "target_id": ObjectId(task_id),
-                    "is_read": False,
-                    "created_at": now
-                })
+                now = datetime.utcnow()
+                await create_notification(
+                    recipient_id=str(task["reporter_id"]),
+                    notification_type=NOTIFICATION_TYPES["TASK_STATUS_CHANGED"],
+                    target_type="task",
+                    target_id=task_id,
+                    sender_id=current_user_id,
+                    template_vars={
+                        "task_summary": task["summary"],
+                        "old_status": changes["status"]["old"],
+                        "new_status": changes["status"]["new"]
+                    }
+                )
                 
                 # 發布實時通知
                 await redis_manager.publish_event(
                     channel=f"user:{str(task['reporter_id'])}:notifications",
                     event_type="notification.created",
                     data={
-                        "type": "status_changed",
+                        "type": NOTIFICATION_TYPES["TASK_STATUS_CHANGED"],
                         "task_id": task_id,
                         "task_summary": task["summary"],
                         "old_status": changes["status"]["old"],
@@ -705,6 +742,16 @@ async def move_task(
                         status_code=HTTP_400_BAD_REQUEST,
                         detail=f"Status transition from '{task['status']}' to '{new_status}' is not allowed by workflow rules"
                     )
+                    
+            # 检查任务关系约束
+            if new_status in WORKING_STATUSES:
+                validation_result = await validate_task_relationships(task_id, new_status)
+                if not validation_result["valid"]:
+                    blocking_task_names = [task["summary"] for task in validation_result["blocking_tasks"]]
+                    raise HTTPException(
+                        status_code=HTTP_400_BAD_REQUEST,
+                        detail=f"任务无法移动至进行中状态，因为它被以下任务阻塞: {', '.join(blocking_task_names)}"
+                    )
         
         # 收集變更信息，用於活動日誌
         changes = {}
@@ -786,8 +833,8 @@ async def move_task(
         if "status" in changes:
             await create_activity_log(
                 user_id=current_user_id,
-                action_type="status_changed",
-                target_type="task",
+                action_type=ACTIVITY_TYPES["TASK_STATUS_CHANGED"],
+                target_type=TARGET_TYPES["TASK"],
                 target_id=task_id,
                 project_id=str(task["project_id"]),
                 details={"status": changes["status"]}
@@ -796,23 +843,25 @@ async def move_task(
             # 通知任務的報告人
             if str(task["reporter_id"]) != current_user_id:
                 now = datetime.utcnow()
-                await mongodb.db.notifications.insert_one({
-                    "recipient_id": task["reporter_id"],
-                    "sender_id": ObjectId(current_user_id),
-                    "type": "status_changed",
-                    "message": f"任務 '{task['summary']}' 的狀態已從 '{changes['status']['old']}' 變更為 '{changes['status']['new']}'",
-                    "target_type": "task",
-                    "target_id": ObjectId(task_id),
-                    "is_read": False,
-                    "created_at": now
-                })
+                await create_notification(
+                    recipient_id=str(task["reporter_id"]),
+                    notification_type=NOTIFICATION_TYPES["TASK_STATUS_CHANGED"],
+                    target_type="task",
+                    target_id=task_id,
+                    sender_id=current_user_id,
+                    template_vars={
+                        "task_summary": task["summary"],
+                        "old_status": changes["status"]["old"],
+                        "new_status": changes["status"]["new"]
+                    }
+                )
                 
                 # 發布實時通知
                 await redis_manager.publish_event(
                     channel=f"user:{str(task['reporter_id'])}:notifications",
                     event_type="notification.created",
                     data={
-                        "type": "status_changed",
+                        "type": NOTIFICATION_TYPES["TASK_STATUS_CHANGED"],
                         "task_id": task_id,
                         "task_summary": task["summary"],
                         "old_status": changes["status"]["old"],
@@ -978,4 +1027,53 @@ async def get_task_activity_log(
         raise HTTPException(
             status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching task activity log: {str(e)}"
+        )
+
+@router.post("/projects/{project_id}/generate-embeddings")
+async def generate_project_tasks_embeddings(
+    project_id: str = Path(...),
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    为项目中的所有任务生成嵌入向量。
+    """
+    try:
+        # 确认项目存在
+        project = await mongodb.db.projects.find_one({"_id": ObjectId(project_id)})
+        if not project:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Project not found")
+        
+        # 异步生成嵌入
+        results = await task_embedding_service.generate_all_tasks_embeddings(project_id=project_id)
+        
+        return {
+            "success": True,
+            "project_id": project_id,
+            "results": results
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating task embeddings: {str(e)}"
+        )
+
+@router.post("/generate-embeddings")
+async def generate_all_tasks_embeddings(
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    为所有任务生成嵌入向量。
+    """
+    try:
+        # 异步生成嵌入
+        results = await task_embedding_service.generate_all_tasks_embeddings()
+        
+        return {
+            "success": True,
+            "results": results
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating task embeddings: {str(e)}"
         )

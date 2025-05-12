@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Callable
 import redis.asyncio as redis
 
 from app.core.config import settings
+from app.core.custom_json import CustomJSONEncoder
 
 class RedisManager:
     _redis = None
@@ -39,7 +40,7 @@ class RedisManager:
             "id": id,
             "retry": retry
         }
-        await redis_conn.publish(channel, json.dumps(event_data))
+        await redis_conn.publish(channel, json.dumps(event_data, cls=CustomJSONEncoder))
     
     @classmethod
     async def subscribe_to_channels(cls, channels: list, callback: Callable):

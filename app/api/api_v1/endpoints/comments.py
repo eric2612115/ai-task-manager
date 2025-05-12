@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import List
-from fastapi import APIRouter, Body, Depends, HTTPException, Path
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pymongo import ReturnDocument
 from starlette.status import HTTP_201_CREATED, HTTP_404_NOT_FOUND, HTTP_500_INTERNAL_SERVER_ERROR
 from bson import ObjectId
@@ -9,7 +9,8 @@ import re
 from app.db.mongodb import mongodb
 from app.db.redis import redis_manager
 from app.models.comment_models import Comment, CommentCreate, CommentUpdate
-from app.services.activity_log_service import create_activity_log
+from app.services.activity_log_service import create_activity_log, ACTIVITY_TYPES, TARGET_TYPES
+from app.services.notification_service import create_notification, NOTIFICATION_TYPES
 from app.services.upload_service import delete_attachment
 
 router = APIRouter()
@@ -105,14 +106,14 @@ async def create_comment(
         # 記錄活動日誌
         await create_activity_log(
             user_id=current_user_id,
-            action_type="comment_added",
-            target_type="comment",
+            action_type=ACTIVITY_TYPES["COMMENT_ADDED"],
+            target_type=TARGET_TYPES["COMMENT"],
             target_id=str(result.inserted_id),
             project_id=str(task["project_id"]),
             details={
                 "task_id": task_id,
-                "content_preview": comment_data.content[:100] + "..." if len(comment_data.content) > 100 else comment_data.content,
-                "mentioned_users": mentioned_users
+                "task_summary": task["summary"],
+                "comment_content": comment_data.content[:100] + ("..." if len(comment_data.content) > 100 else "")
             }
         )
         
@@ -120,21 +121,27 @@ async def create_comment(
         if task.get("assignee_id") and str(task["assignee_id"]) != current_user_id:
             await create_notification(
                 recipient_id=str(task["assignee_id"]),
-                sender_id=current_user_id,
-                type="comment_on_my_task",
-                message=f"有人在你負責的任務上添加了評論: {task['summary']}",
+                notification_type=NOTIFICATION_TYPES["COMMENT_ADDED"],
                 target_type="comment",
-                target_id=str(result.inserted_id)
+                target_id=str(result.inserted_id),
+                sender_id=current_user_id,
+                template_vars={
+                    "relation": "你負責的",
+                    "task_summary": task["summary"]
+                }
             )
         
         if str(task["reporter_id"]) != current_user_id and (not task.get("assignee_id") or str(task["reporter_id"]) != str(task["assignee_id"])):
             await create_notification(
                 recipient_id=str(task["reporter_id"]),
-                sender_id=current_user_id,
-                type="comment_on_my_task",
-                message=f"有人在你報告的任務上添加了評論: {task['summary']}",
+                notification_type=NOTIFICATION_TYPES["COMMENT_ADDED"],
                 target_type="comment",
-                target_id=str(result.inserted_id)
+                target_id=str(result.inserted_id),
+                sender_id=current_user_id,
+                template_vars={
+                    "relation": "你報告的",
+                    "task_summary": task["summary"]
+                }
             )
         
         # 處理 @提及
@@ -144,11 +151,13 @@ async def create_comment(
             if mentioned_user and str(mentioned_user["_id"]) != current_user_id:
                 await create_notification(
                     recipient_id=str(mentioned_user["_id"]),
-                    sender_id=current_user_id,
-                    type="mentioned_me",
-                    message=f"有人在評論中提及了你 @{username}",
+                    notification_type=NOTIFICATION_TYPES["MENTIONED"],
                     target_type="comment",
-                    target_id=str(result.inserted_id)
+                    target_id=str(result.inserted_id),
+                    sender_id=current_user_id,
+                    template_vars={
+                        "username": username
+                    }
                 )
         
         # 發布評論創建事件
@@ -159,7 +168,9 @@ async def create_comment(
                 "comment_id": str(result.inserted_id),
                 "task_id": task_id,
                 "author_id": current_user_id,
-                "content_preview": comment_data.content[:100] + "..." if len(comment_data.content) > 100 else comment_data.content
+                "content": comment_data.content,
+                "mentions": mentioned_users,
+                "created_at": now.isoformat()
             }
         )
         
@@ -270,11 +281,13 @@ async def update_comment(
                 if mentioned_user and str(mentioned_user["_id"]) != current_user_id:
                     await create_notification(
                         recipient_id=str(mentioned_user["_id"]),
-                        sender_id=current_user_id,
-                        type="mentioned_me",
-                        message=f"有人在評論中提及了你 @{username}",
+                        notification_type=NOTIFICATION_TYPES["MENTIONED"],
                         target_type="comment",
-                        target_id=comment_id
+                        target_id=comment_id,
+                        sender_id=current_user_id,
+                        template_vars={
+                            "username": username
+                        }
                     )
             
             # 發布評論更新事件

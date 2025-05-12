@@ -429,6 +429,54 @@ async def update_project(
         # 可能因為嘗試設置相同的值，導致沒有實際更新
         pass
     
+    # 如果更新了工作流规则，检查现有任务状态是否符合新规则
+    if project_data.settings and project_data.settings.task_status_workflow:
+        # 获取项目所有任务
+        project_tasks = await mongodb.db.tasks.find({"project_id": project_obj_id}).to_list(500)
+        
+        # 构建新工作流的状态映射，快速查询合法转换
+        new_workflow = project_data.settings.task_status_workflow
+        valid_status_values = set()
+        for transition in new_workflow:
+            valid_status_values.add(transition.from_status)
+            valid_status_values.add(transition.to_status)
+        
+        # 检查所有任务的状态是否在新工作流中存在
+        invalid_tasks = []
+        for task in project_tasks:
+            if task["status"] not in valid_status_values:
+                invalid_tasks.append({
+                    "id": str(task["_id"]),
+                    "summary": task["summary"],
+                    "current_status": task["status"]
+                })
+        
+        # 如果有任务状态不符合新工作流，记录警告但不阻止更新
+        if invalid_tasks:
+            # 记录警告日志
+            await create_activity_log(
+                user_id=current_user_id,
+                action_type="workflow_update_warning",
+                target_type="project",
+                target_id=project_id,
+                project_id=project_id,
+                details={
+                    "warning": "工作流更新后存在状态不兼容的任务",
+                    "affected_tasks": invalid_tasks
+                }
+            )
+            
+            # 发送通知
+            await redis_manager.publish_event(
+                channel=f"project:{project_id}:events",
+                event_type="project.workflow_update_warning",
+                data={
+                    "project_id": project_id,
+                    "warning": "工作流更新后存在状态不兼容的任务",
+                    "affected_tasks_count": len(invalid_tasks)
+                }
+            )
+    
     # 獲取更新後的專案
     updated_project = await mongodb.db.projects.find_one({"_id": project_obj_id})
     

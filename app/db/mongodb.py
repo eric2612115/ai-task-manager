@@ -105,7 +105,11 @@ class Database:
             IndexModel([("tags", ASCENDING)]),
             IndexModel([("created_at", DESCENDING)]),
             IndexModel([("updated_at", DESCENDING)]),
-            IndexModel([("summary", TEXT), ("description", TEXT)], name="text_search_index")
+            IndexModel([("summary", ASCENDING)]),
+            IndexModel([("description", ASCENDING)]),
+            IndexModel([("priority", ASCENDING)]),
+            IndexModel([("due_date", ASCENDING)]),
+            IndexModel([("summary", TEXT), ("description", TEXT), ("tags", TEXT)], name="text_search_index")
         ]
         
         await self.db.tasks.create_indexes(tasks_indexes)

@@ -61,7 +61,8 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
     CHROMA_COLLECTION_CODE: str = os.getenv("CHROMA_COLLECTION_CODE", "code_embeddings")
     CHROMA_COLLECTION_DOCS: str = os.getenv("CHROMA_COLLECTION_DOCS", "doc_embeddings")
-
+    CHROMA_COLLECTION_TASKS: str = os.getenv("CHROMA_COLLECTION_TASKS", "task_embeddings")
+    
     # 模型配置
     CODEBERT_MODEL: str = os.getenv("CODEBERT_MODEL", "microsoft/codebert-base")
     SENTENCE_TRANSFORMER_MODEL: str = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")

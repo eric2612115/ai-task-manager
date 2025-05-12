@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pymongo.errors import DuplicateKeyError
 from starlette.status import HTTP_201_CREATED, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT, HTTP_500_INTERNAL_SERVER_ERROR, HTTP_400_BAD_REQUEST
@@ -22,6 +22,70 @@ INVERSE_RELATIONSHIP_TYPES = {
     "duplicate": "is_duplicate_of",
     "is_duplicate_of": "duplicate"
 }
+
+# 获取依赖关系完成状态
+COMPLETED_STATUSES = ["Resolved", "Closed", "已解决", "已关闭", "完成"]
+
+# 定义工作状态
+WORKING_STATUSES = ["In Progress", "进行中", "处理中"]
+
+# 工具函数：验证任务依赖关系
+async def validate_task_relationships(task_id: str, target_status: str) -> Dict:
+    """
+    验证任务是否满足依赖关系约束，可以变更为目标状态
+    
+    Args:
+        task_id: 要验证的任务ID
+        target_status: 目标状态
+        
+    Returns:
+        Dict包含验证结果: {
+            "valid": True/False,
+            "blocking_tasks": [阻塞任务列表]
+        }
+    """
+    result = {
+        "valid": True,
+        "blocking_tasks": []
+    }
+    
+    # 只检查变更为工作中状态的情况
+    if target_status not in WORKING_STATUSES:
+        return result
+        
+    # 查找阻塞此任务的关系
+    try:
+        blocking_relationships = await mongodb.db.relationships.find({
+            "target_task_id": ObjectId(task_id),
+            "type": "is_blocked_by"
+        }).to_list(100)
+        
+        if blocking_relationships:
+            # 检查所有阻塞任务的状态
+            blocking_task_ids = [ObjectId(rel["source_task_id"]) for rel in blocking_relationships]
+            blocking_tasks = await mongodb.db.tasks.find({
+                "_id": {"$in": blocking_task_ids},
+                # 检查这些任务是否处于未完成状态
+                "status": {"$nin": COMPLETED_STATUSES}
+            }).to_list(100)
+            
+            if blocking_tasks:
+                # 有阻塞任务还未完成
+                result["valid"] = False
+                result["blocking_tasks"] = [
+                    {
+                        "id": str(task["_id"]),
+                        "summary": task.get("summary", "未知任务"),
+                        "status": task.get("status")
+                    }
+                    for task in blocking_tasks
+                ]
+    except Exception as e:
+        print(f"Error validating task relationships: {e}")
+        # 出错时默认为有效，避免阻止正常操作
+        pass
+        
+    return result
 
 # 獲取當前用戶ID (暫時固定返回一個測試用戶ID)
 async def get_current_user_id():

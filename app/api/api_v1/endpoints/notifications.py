@@ -1,13 +1,20 @@
 from datetime import datetime
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pymongo import ReturnDocument
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Body
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_500_INTERNAL_SERVER_ERROR, HTTP_200_OK
 from bson import ObjectId
 
 from app.db.mongodb import mongodb
 from app.db.redis import redis_manager
 from app.models.other_models import Notification
+from app.services.notification_service import (
+    get_user_notifications, 
+    mark_notification_as_read, 
+    mark_all_notifications_as_read,
+    get_unread_notification_count,
+    update_user_notification_preferences,
+    NOTIFICATION_TYPES
+)
 
 router = APIRouter()
 
@@ -18,7 +25,7 @@ async def get_current_user_id():
     return "507f1f77bcf86cd799439011"  # 模擬用戶ID
 
 @router.get("/users/{user_id}/", response_model=List[Notification])
-async def get_user_notifications(
+async def get_notifications(
     user_id: str = Path(...),
     is_read: Optional[bool] = None,
     type: Optional[str] = None,
@@ -34,18 +41,13 @@ async def get_user_notifications(
         # if current_user_id != user_id:
         #     raise HTTPException(status_code=403, detail="Access denied")
         
-        # 構建查詢條件
-        query = {"recipient_id": ObjectId(user_id)}
-        
-        if is_read is not None:
-            query["is_read"] = is_read
-            
-        if type:
-            query["type"] = type
-        
-        # 查詢通知
-        notifications_cursor = mongodb.db.notifications.find(query).sort([("created_at", -1)]).skip(skip).limit(limit)
-        notifications = await notifications_cursor.to_list(length=limit)
+        notifications = await get_user_notifications(
+            user_id=user_id,
+            is_read=is_read,
+            notification_type=type,
+            skip=skip,
+            limit=limit
+        )
         
         return notifications
         
@@ -55,7 +57,30 @@ async def get_user_notifications(
             detail=f"Error fetching user notifications: {str(e)}"
         )
 
-@router.put("/{notification_id}/read", response_model=Notification)
+@router.get("/users/{user_id}/count", response_model=Dict[str, int])
+async def get_unread_count(
+    user_id: str = Path(...),
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    獲取用戶未讀通知數量。
+    """
+    try:
+        # 在實際應用中，應驗證當前用戶是否有權查看目標用戶的通知
+        # if current_user_id != user_id:
+        #     raise HTTPException(status_code=403, detail="Access denied")
+        
+        count = await get_unread_notification_count(user_id)
+        
+        return {"count": count}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching unread notification count: {str(e)}"
+        )
+
+@router.put("/{notification_id}/read", response_model=Dict[str, Any])
 async def mark_notification_read(
     notification_id: str = Path(...),
     current_user_id: str = Depends(get_current_user_id)
@@ -64,46 +89,26 @@ async def mark_notification_read(
     將指定通知標記為已讀。
     """
     try:
-        # 查找通知
-        notification = await mongodb.db.notifications.find_one({"_id": ObjectId(notification_id)})
-        if not notification:
-            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Notification not found")
+        success = await mark_notification_as_read(notification_id)
         
-        # 在實際應用中，應驗證當前用戶是否有權標記此通知
-        # if str(notification["recipient_id"]) != current_user_id:
-        #     raise HTTPException(status_code=403, detail="Access denied")
+        if not success:
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND, 
+                detail="Notification not found or could not be marked as read"
+            )
         
-        # 如果通知已經是已讀狀態，直接返回
-        if notification.get("is_read", False):
-            return notification
+        return {"success": True, "notification_id": notification_id}
         
-        # 更新通知為已讀
-        updated_notification = await mongodb.db.notifications.find_one_and_update(
-            {"_id": ObjectId(notification_id)},
-            {"$set": {"is_read": True}},
-            return_document=ReturnDocument.AFTER
-        )
-        
-        # 發布通知更新事件
-        await redis_manager.publish_event(
-            channel=f"user:{str(notification['recipient_id'])}:notifications",
-            event_type="notification.updated",
-            data={
-                "notification_id": notification_id,
-                "is_read": True
-            }
-        )
-        
-        return updated_notification
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error marking notification as read: {str(e)}"
         )
 
-@router.put("/users/{user_id}/mark_all_read")
-async def mark_all_notifications_read(
+@router.put("/users/{user_id}/mark_all_read", response_model=Dict[str, Any])
+async def mark_all_read(
     user_id: str = Path(...),
     current_user_id: str = Depends(get_current_user_id)
 ):
@@ -115,28 +120,12 @@ async def mark_all_notifications_read(
         # if current_user_id != user_id:
         #     raise HTTPException(status_code=403, detail="Access denied")
         
-        # 更新所有未讀通知
-        result = await mongodb.db.notifications.update_many(
-            {
-                "recipient_id": ObjectId(user_id),
-                "is_read": False
-            },
-            {"$set": {"is_read": True}}
-        )
-        
-        # 發布通知批量更新事件
-        await redis_manager.publish_event(
-            channel=f"user:{user_id}:notifications",
-            event_type="notification.bulk_updated",
-            data={
-                "all_marked_read": True,
-                "count": result.modified_count
-            }
-        )
+        count = await mark_all_notifications_as_read(user_id)
         
         return {
+            "success": True,
             "message": "All notifications marked as read",
-            "count": result.modified_count
+            "count": count
         }
         
     except Exception as e:
@@ -144,3 +133,63 @@ async def mark_all_notifications_read(
             status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error marking all notifications as read: {str(e)}"
         )
+
+@router.put("/users/{user_id}/preferences", response_model=Dict[str, Any])
+async def update_notification_preferences(
+    user_id: str = Path(...),
+    preferences: Dict[str, bool] = Body(...),
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    更新用户的通知偏好设置。
+    
+    可以设置每种通知类型是否接收。例如：
+    ```
+    {
+        "task_assigned_to_me": true,
+        "status_changed": false,
+        "comment_on_my_task": true,
+        "mentioned_me": true
+    }
+    ```
+    """
+    try:
+        # 在實際應用中，應驗證當前用戶是否有權更新目標用戶的偏好設置
+        # if current_user_id != user_id:
+        #     raise HTTPException(status_code=403, detail="Access denied")
+        
+        # 验证通知类型是否有效
+        for notification_type in preferences.keys():
+            if notification_type not in NOTIFICATION_TYPES.values():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid notification type: {notification_type}"
+                )
+        
+        success = await update_user_notification_preferences(user_id, preferences)
+        
+        if not success:
+            raise HTTPException(
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update notification preferences"
+            )
+        
+        return {
+            "success": True,
+            "message": "Notification preferences updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating notification preferences: {str(e)}"
+        )
+
+@router.get("/types", response_model=Dict[str, str])
+async def get_notification_types():
+    """
+    获取所有支持的通知类型。
+    """
+    return NOTIFICATION_TYPES

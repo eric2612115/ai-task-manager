@@ -9,5 +9,5 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, ObjectId):
             return str(obj)
         if isinstance(obj, datetime):
-            return obj.isoformat()
+            return obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return super().default(obj) 
