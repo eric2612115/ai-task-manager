@@ -54,3 +54,24 @@ class RAGQueryResponse(BaseModel):
     sources: List[SearchResult]
     execution_time: float  # 执行时间（秒）
     token_usage: Optional[Dict[str, int]] = None  # 使用的token数 
+
+class UnifiedSearchRequest(BaseModel):
+    query: str
+    repo_id: Optional[str] = None
+    project_id: Optional[str] = None
+    include_code: bool = True
+    include_docs: bool = True
+    include_tasks: bool = True
+    include_comments: bool = True
+    include_external_docs: bool = True
+    limit: int = 10
+
+class UserInteraction(MongoBaseModel):
+    user_id: PyObjectId
+    document_id: str
+    document_type: str  # code, doc, task, comment, external_doc
+    interaction_type: str  # click, helpful, not_helpful, bookmark
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    project_id: Optional[PyObjectId] = None
+    interaction_count: int = 1
+    metadata: Dict[str, Any] = {} 

@@ -89,7 +89,7 @@ class Database:
         projects_indexes = [
             IndexModel([("name", ASCENDING)]),
             IndexModel([("members", ASCENDING)]),
-            IndexModel([("name", TEXT), ("description", TEXT)], name="text_search_index")
+            IndexModel([("name", TEXT), ("description", TEXT)], name="projects_text_search_index")
         ]
         
         await self.db.projects.create_indexes(projects_indexes)
@@ -109,7 +109,7 @@ class Database:
             IndexModel([("description", ASCENDING)]),
             IndexModel([("priority", ASCENDING)]),
             IndexModel([("due_date", ASCENDING)]),
-            IndexModel([("summary", TEXT), ("description", TEXT), ("tags", TEXT)], name="text_search_index")
+            IndexModel([("summary", TEXT), ("description", TEXT), ("tags", TEXT)], name="tasks_text_search_index")
         ]
         
         await self.db.tasks.create_indexes(tasks_indexes)
@@ -120,7 +120,7 @@ class Database:
             IndexModel([("task_id", ASCENDING)]),
             IndexModel([("author_id", ASCENDING)]),
             IndexModel([("created_at", ASCENDING)]),
-            IndexModel([("content", TEXT)], name="text_search_index")
+            IndexModel([("content", TEXT)], name="comments_text_search_index")
         ]
         
         await self.db.comments.create_indexes(comments_indexes)
@@ -130,7 +130,7 @@ class Database:
         sprints_indexes = [
             IndexModel([("project_id", ASCENDING)]),
             IndexModel([("state", ASCENDING)]),
-            IndexModel([("name", TEXT)], name="text_search_index")
+            IndexModel([("name", TEXT)], name="sprints_text_search_index")
         ]
         
         await self.db.sprints.create_indexes(sprints_indexes)
@@ -139,7 +139,7 @@ class Database:
         """初始化看板集合和索引"""
         boards_indexes = [
             IndexModel([("project_id", ASCENDING)]),
-            IndexModel([("name", TEXT)], name="text_search_index")
+            IndexModel([("name", TEXT)], name="boards_text_search_index")
         ]
         
         await self.db.boards.create_indexes(boards_indexes)

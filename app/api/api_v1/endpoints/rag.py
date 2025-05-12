@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, Path, Body
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+from bson import ObjectId
 
 from app.services.embedding_service import EmbeddingService
 from app.services.rag_service import RAGService
@@ -8,9 +10,11 @@ from app.models.rag_models import (
     EmbeddingRequest,
     SearchRequest,
     RAGQueryRequest,
-    RAGQueryResponse
+    RAGQueryResponse,
+    UnifiedSearchRequest
 )
 from app.core.utils import serialize_mongodb_doc
+from app.db.mongodb import mongodb
 
 router = APIRouter()
 embedding_service = EmbeddingService()
@@ -201,4 +205,197 @@ async def highlight_context_matches(request: Dict[str, Any] = Body(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error highlighting context: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error highlighting context: {str(e)}")
+
+@router.post("/unified-search", response_model=Dict[str, Any])
+async def unified_search(request: UnifiedSearchRequest):
+    """
+    统一搜索接口，合并所有来源的结果
+    
+    - 支持代码、文档、任务、评论和外部文档的搜索
+    - 可以指定搜索范围和数据源
+    """
+    try:
+        results = await rag_service.unified_search(
+            query=request.query,
+            repo_id=request.repo_id,
+            project_id=request.project_id,
+            include_code=request.include_code,
+            include_docs=request.include_docs,
+            include_tasks=request.include_tasks,
+            include_comments=request.include_comments,
+            include_external_docs=request.include_external_docs,
+            limit=request.limit
+        )
+        
+        return {
+            "success": True,
+            "data": results,
+            "count": len(results),
+            "query": request.query
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error performing unified search: {str(e)}")
+
+@router.post("/interactions", response_model=Dict[str, Any])
+async def record_user_interaction(interaction: Dict[str, Any] = Body(...)):
+    """
+    记录用户与搜索结果的交互
+    
+    请求体:
+        {
+            "document_id": "文档ID",
+            "document_type": "文档类型",
+            "interaction_type": "click|helpful|not_helpful|bookmark",
+            "project_id": "项目ID",
+            "metadata": {
+                "query": "搜索查询",
+                "position": 2
+            }
+        }
+    """
+    try:
+        # 验证必要字段
+        required_fields = ["document_id", "document_type", "interaction_type"]
+        for field in required_fields:
+            if field not in interaction:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        
+        # 获取或创建用户ID (实际应用中应从认证系统获取)
+        user_id = "507f1f77bcf86cd799439011"  # 模拟用户ID
+        
+        # 准备记录数据
+        record = {
+            "user_id": ObjectId(user_id),
+            "document_id": interaction["document_id"],
+            "document_type": interaction["document_type"],
+            "interaction_type": interaction["interaction_type"],
+            "timestamp": datetime.utcnow(),
+            "project_id": ObjectId(interaction["project_id"]) if "project_id" in interaction else None,
+            "metadata": interaction.get("metadata", {})
+        }
+        
+        # 插入或更新交互记录
+        await mongodb.db.user_document_interactions.update_one(
+            {
+                "user_id": record["user_id"],
+                "document_id": record["document_id"],
+                "document_type": record["document_type"]
+            },
+            {"$set": record, "$inc": {"interaction_count": 1}},
+            upsert=True
+        )
+        
+        return {
+            "success": True,
+            "message": "User interaction recorded successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error recording user interaction: {str(e)}"
+        )
+
+@router.post("/rerank-with-feedback", response_model=Dict[str, Any])
+async def rerank_with_feedback(request: Dict[str, Any] = Body(...)):
+    """
+    基于用户历史反馈重排序搜索结果
+    
+    请求体:
+        {
+            "query": "查询文本",
+            "results": [搜索结果数组],
+            "project_id": "项目ID",
+            "limit": 5
+        }
+    """
+    try:
+        query = request.get("query")
+        results = request.get("results", [])
+        project_id = request.get("project_id")
+        limit = request.get("limit", 5)
+        
+        if not query or not results:
+            raise HTTPException(status_code=400, detail="Query and results are required")
+        
+        # 获取用户ID (实际应用中应从认证系统获取)
+        user_id = "507f1f77bcf86cd799439011"  # 模拟用户ID
+        
+        # 执行基于用户反馈的重排序
+        reranked_results = await rag_service.rerank_with_feedback(
+            query=query,
+            results=results,
+            user_id=user_id,
+            project_id=project_id,
+            limit=limit
+        )
+        
+        return {
+            "success": True,
+            "data": reranked_results,
+            "count": len(reranked_results)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reranking results: {str(e)}")
+
+@router.post("/advanced-hybrid-search", response_model=Dict[str, Any])
+async def advanced_hybrid_search(request: Dict[str, Any] = Body(...)):
+    """
+    执行高级混合检索
+    
+    请求体:
+        {
+            "query": "查询文本",
+            "repo_id": "仓库ID",
+            "project_id": "项目ID",
+            "collection": "code|docs|both",
+            "limit": 10,
+            "file_types": ["python", "javascript"],
+            "use_bm25": true,
+            "use_vector": true,
+            "fusion_method": "rrf|weighted|simple"
+        }
+    """
+    try:
+        query = request.get("query")
+        repo_id = request.get("repo_id")
+        project_id = request.get("project_id")
+        collection = request.get("collection")
+        limit = request.get("limit", 10)
+        file_types = request.get("file_types")
+        use_bm25 = request.get("use_bm25", True)
+        use_vector = request.get("use_vector", True)
+        fusion_method = request.get("fusion_method", "rrf")
+        
+        if not query or not repo_id:
+            raise HTTPException(status_code=400, detail="Query and repo_id are required")
+        
+        # 执行高级混合检索
+        results = await rag_service.advanced_hybrid_search(
+            query=query,
+            repo_id=repo_id,
+            project_id=project_id,
+            collection=collection,
+            limit=limit,
+            file_types=file_types,
+            use_bm25=use_bm25,
+            use_vector=use_vector,
+            fusion_method=fusion_method
+        )
+        
+        return {
+            "success": True,
+            "data": results,
+            "count": len(results),
+            "query": query,
+            "fusion_method": fusion_method
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error performing advanced hybrid search: {str(e)}") 

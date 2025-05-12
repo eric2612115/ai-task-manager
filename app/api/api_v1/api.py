@@ -4,7 +4,8 @@ from app.api.api_v1.endpoints import (
     tasks, projects, users, comments, boards, 
     sprints, attachments, activity_logs, notifications,
     relationships, search, tags, events,
-    git, code, docs, rag, websockets, conversations
+    git, code, docs, rag, websockets, conversations,
+    external_documents
 )
 from app.ai_configs.routers import router as ai_configs_router
 
@@ -60,6 +61,9 @@ api_router.include_router(docs.router, prefix="/project-docs", tags=["docs"])
 
 # RAG系统路由
 api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
+
+# 外部文档路由
+api_router.include_router(external_documents.router, prefix="/external-documents", tags=["external_documents"])
 
 # WebSocket路由
 api_router.include_router(websockets.router, prefix="/ws", tags=["websockets"])

@@ -47,6 +47,11 @@
 - **混合检索策略**：结合语义相似度和关键词匹配
 - **内容分块优化**：针对代码和文档的智能分块策略
 - **结果可视化**：高亮显示查询与内容的匹配部分
+- **多数据源支持**：集成代码、文档、任务票、评论和外部文档
+- **统一搜索接口**：跨数据源的统一检索体验
+- **结果融合与重排序**：使用Reciprocal Rank Fusion算法合并不同来源的搜索结果
+- **外部文档处理**：支持PDF、DOCX、TXT、Excel、CSV等多种格式
+- **智能文档分块**：基于文档结构的智能分块和递归摘要分块
 
 ### AI提供商配置管理
 
@@ -183,6 +188,7 @@ http://localhost:8000/api/v1/docs
 - RAG可视化：`/api/v1/rag/visualization/`
 - 对话管理：`/api/v1/conversations/`
 - WebSocket对话：`ws://localhost:8000/api/v1/ws/chat`
+- 外部文档管理：`/api/v1/external-documents/`
 
 ### 其他功能
 - 搜索功能：`/api/v1/search/`
@@ -232,7 +238,7 @@ POST /api/v1/rag/search
 }
 ```
 
-### 执行RAG查询
+### 执行混合检索
 
 ```
 POST /api/v1/rag/query
@@ -240,8 +246,26 @@ POST /api/v1/rag/query
   "query": "如何使用formatDate函数?",
   "repo_id": "your-repo-id",
   "include_code": true,
-  "include_docs": true
+  "include_docs": true,
+  "include_tasks": true,
+  "include_comments": true,
+  "include_external_docs": true,
+  "project_id": "your-project-id",
+  "use_hybrid_search": true
 }
+```
+
+### 上传外部文档
+
+```
+POST /api/v1/external-documents/
+Content-Type: multipart/form-data
+
+file: <文件数据>
+title: 文档标题
+description: 文档描述
+project_id: 项目ID
+tags: 标签1,标签2
 ```
 
 ### 获取RAG可视化数据

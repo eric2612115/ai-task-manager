@@ -1940,622 +1940,503 @@ eventSource.onerror = (error) => {
 
 ## RAG系统
 
-### 生成嵌入向量
+RAG（檢索增強生成）系統提供了基於項目代碼庫和文檔的智能搜索和問答功能。
+
+### 嵌入管理
+
+#### 生成倉庫嵌入向量
 
 ```
 POST /rag/embeddings/generate/{repo_id}
 ```
 
-路径参数:
-- `repo_id`: 代码仓库ID
+路徑參數:
+- `repo_id`: 代碼倉庫ID
 
-请求体:
+請求體:
 ```json
 {
   "force_regenerate": false
 }
 ```
 
-响应:
+響應:
 ```json
 {
   "success": true,
   "message": "Embedding generation started successfully.",
   "status": {
-    "repo_id": "60c72b2f9b1a8d001f3a0a1d",
+    "repository_id": "681d5a006a50a00d67339f9d",
     "status": "processing",
-    "start_time": "2023-05-03T10:00:00Z",
-    "progress": 0.0,
-    "total_files": 0,
+    "total_files": 120,
     "processed_files": 0,
-    "errors": []
+    "created_at": "2024-05-15T08:30:00.000Z",
+    "updated_at": "2024-05-15T08:30:00.000Z"
   }
 }
 ```
 
-### 查询嵌入状态
+#### 獲取嵌入生成狀態
 
 ```
 GET /rag/embeddings/status/{repo_id}
 ```
 
-路径参数:
-- `repo_id`: 代码仓库ID
+路徑參數:
+- `repo_id`: 代碼倉庫ID
 
-响应:
+響應:
 ```json
 {
   "success": true,
   "status": {
-    "repo_id": "60c72b2f9b1a8d001f3a0a1d",
+    "repository_id": "681d5a006a50a00d67339f9d",
     "status": "completed",
-    "start_time": "2023-05-03T10:00:00Z",
-    "end_time": "2023-05-03T10:05:00Z",
-    "progress": 1.0,
     "total_files": 120,
     "processed_files": 120,
-    "failed_files": 2,
-    "code_chunks": 350,
-    "doc_chunks": 75,
-    "errors": []
+    "created_at": "2024-05-15T08:30:00.000Z",
+    "updated_at": "2024-05-15T08:35:00.000Z"
   }
 }
 ```
 
-### 执行语义搜索
-
-```
-POST /rag/search
-```
-
-请求体:
-```json
-{
-  "query": "如何实现用户认证功能?",
-  "repo_id": "60c72b2f9b1a8d001f3a0a1d",
-  "collection": "all",
-  "limit": 5,
-  "file_types": ["js", "py"]
-}
-```
-
-响应:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "file_path": "src/auth/auth.js",
-      "file_name": "auth.js",
-      "content": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
-      "score": 0.85,
-      "language": "javascript",
-      "type": "code",
-      "metadata": {
-        "line_start": 45,
-        "line_end": 48
-      }
-    },
-    {
-      "file_path": "docs/authentication.md",
-      "file_name": "authentication.md",
-      "content": "# 认证系统\n\n本系统使用JWT进行用户认证...",
-      "score": 0.82,
-      "language": null,
-      "type": "doc",
-      "metadata": {}
-    }
-  ],
-  "count": 2,
-  "query": "如何实现用户认证功能?"
-}
-```
-
-### 执行RAG查询
-
-```
-POST /rag/query
-```
-
-请求体:
-```json
-{
-  "query": "如何实现用户认证功能?",
-  "repo_id": "60c72b2f9b1a8d001f3a0a1d",
-  "context_limit": 5,
-  "llm_model": "gemini-2.5-flash",
-  "llm_provider": "google",
-  "include_code": true,
-  "include_docs": true,
-  "temperature": 0.7,
-  "max_tokens": 1000
-}
-```
-
-响应:
-```json
-{
-  "success": true,
-  "data": {
-    "answer": "在这个仓库中，用户认证功能使用JWT实现。主要代码位于`src/auth/auth.js`文件...",
-    "references": [
-      {
-        "file_path": "src/auth/auth.js",
-        "file_name": "auth.js",
-        "content": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
-        "score": 0.85,
-        "language": "javascript",
-        "type": "code",
-        "metadata": {
-          "line_start": 45,
-          "line_end": 48
-        }
-      }
-    ],
-    "model": "gemini-2.5-flash",
-    "provider": "google"
-  },
-  "query": "如何实现用户认证功能?"
-}
-```
-
-### 删除嵌入向量
+#### 刪除倉庫嵌入向量
 
 ```
 DELETE /rag/embeddings/{repo_id}
 ```
 
-路径参数:
-- `repo_id`: 代码仓库ID
+路徑參數:
+- `repo_id`: 代碼倉庫ID
 
-响应:
+響應:
 ```json
 {
   "success": true,
-  "message": "Embeddings for repository 60c72b2f9b1a8d001f3a0a1d have been deleted successfully."
+  "message": "Embeddings for repository 681d5a006a50a00d67339f9d have been deleted successfully."
 }
 ```
 
-### 获取消息可视化数据
+### 語義搜索
+
+#### 執行語義搜索
+
+```
+POST /rag/search
+```
+
+請求體:
+```json
+{
+  "query": "如何使用formatDate函數?",
+  "repo_id": "681d5a006a50a00d67339f9d",
+  "collection": "code",
+  "limit": 5,
+  "file_types": ["js", "ts"]
+}
+```
+
+參數說明:
+- `query`: 搜索查詢文本
+- `repo_id`: 代碼倉庫ID
+- `collection`: 搜索集合，可選值: "code", "docs", "both" (默認為"both")
+- `limit`: 返回結果數量限制 (默認為5)
+- `file_types`: 文件類型過濾 (可選)
+
+響應:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "file_id": "681d5a006a50a00d67339f9e",
+      "file_path": "src/utils/dateUtils.js",
+      "file_name": "dateUtils.js",
+      "content": "/**\n * 格式化日期\n * @param {Date} date - 日期對象\n * @param {string} format - 格式字符串\n * @returns {string} 格式化後的日期字符串\n */\nexport function formatDate(date, format = 'YYYY-MM-DD') {\n  // 實現省略\n}",
+      "language": "javascript",
+      "score": 0.92,
+      "type": "code"
+    }
+  ],
+  "count": 1,
+  "query": "如何使用formatDate函數?"
+}
+```
+
+### 統一搜索接口
+
+#### 執行統一搜索
+
+```
+POST /rag/unified-search
+```
+
+請求體:
+```json
+{
+  "query": "項目計劃",
+  "repo_id": "681d5a006a50a00d67339f9d",
+  "project_id": "681d5a006a50a00d67339f9d",
+  "include_code": true,
+  "include_docs": true,
+  "include_tasks": true,
+  "include_comments": true,
+  "include_external_docs": true,
+  "limit": 10
+}
+```
+
+參數說明:
+- `query`: 搜索查詢文本
+- `repo_id`: 代碼倉庫ID (用於搜索代碼和文檔)
+- `project_id`: 項目ID (用於搜索任務、評論和外部文檔)
+- `include_code`: 是否包含代碼搜索結果
+- `include_docs`: 是否包含文檔搜索結果
+- `include_tasks`: 是否包含任務搜索結果
+- `include_comments`: 是否包含評論搜索結果
+- `include_external_docs`: 是否包含外部文檔搜索結果
+- `limit`: 每種類型返回結果數量限制
+
+響應:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "file_id": "681d5a006a50a00d67339f9e",
+      "file_path": "docs/project_plan.md",
+      "file_name": "project_plan.md",
+      "content": "# 項目計劃\n\n本文檔描述了項目的整體計劃和時間線...",
+      "language": "markdown",
+      "score": 0.95,
+      "type": "doc"
+    },
+    {
+      "file_id": "681d5a006a50a00d67339f9f",
+      "file_name": "項目規劃任務",
+      "content": "制定項目第二階段的詳細計劃",
+      "score": 0.89,
+      "type": "task",
+      "metadata": {
+        "status": "in_progress",
+        "priority": "high",
+        "assignee": "張三"
+      }
+    },
+    {
+      "file_id": "681d5a006a50a00d67339fa0",
+      "file_name": "項目計劃.pdf",
+      "content": "本項目計劃書旨在提供一個全面的項目實施框架...",
+      "score": 0.87,
+      "type": "external_doc",
+      "metadata": {
+        "title": "項目計劃書",
+        "description": "詳細的項目計劃文檔",
+        "tags": ["計劃", "文檔"]
+      }
+    }
+  ],
+  "count": 3,
+  "query": "項目計劃"
+}
+```
+
+### RAG查詢
+
+#### 執行RAG查詢
+
+```
+POST /rag/query
+```
+
+請求體:
+```json
+{
+  "query": "如何使用formatDate函數?",
+  "repo_id": "681d5a006a50a00d67339f9d",
+  "context_limit": 5,
+  "llm_model": "gpt-4o",
+  "llm_provider": "openai",
+  "include_code": true,
+  "include_docs": true,
+  "include_tasks": true,
+  "include_comments": true,
+  "include_external_docs": true,
+  "project_id": "681d5a006a50a00d67339f9d",
+  "use_hybrid_search": true,
+  "temperature": 0.7,
+  "max_tokens": 1000,
+  "file_types": ["js", "ts"]
+}
+```
+
+參數說明:
+- `query`: 查詢文本
+- `repo_id`: 代碼倉庫ID
+- `context_limit`: 上下文數量限制 (默認為5)
+- `llm_model`: LLM模型名稱 (可選，默認由系統配置決定)
+- `llm_provider`: LLM提供商 (可選，默認由系統配置決定)
+- `include_code`: 是否包含代碼搜索結果 (默認為true)
+- `include_docs`: 是否包含文檔搜索結果 (默認為true)
+- `include_tasks`: 是否包含任務搜索結果 (默認為false)
+- `include_comments`: 是否包含評論搜索結果 (默認為false)
+- `include_external_docs`: 是否包含外部文檔搜索結果 (默認為false)
+- `project_id`: 項目ID (用於搜索任務、評論和外部文檔)
+- `use_hybrid_search`: 是否使用混合搜索 (默認為false)
+- `temperature`: 生成溫度 (默認為0.7)
+- `max_tokens`: 最大生成令牌數 (默認為1000)
+- `file_types`: 文件類型過濾 (可選)
+
+響應:
+```json
+{
+  "success": true,
+  "data": {
+    "query": "如何使用formatDate函數?",
+    "answer": "formatDate函數用於將日期對象格式化為指定格式的字符串。使用方法如下：\n\n```javascript\nimport { formatDate } from './utils/dateUtils';\n\n// 基本用法\nconst formattedDate = formatDate(new Date(), 'YYYY-MM-DD');\nconsole.log(formattedDate); // 例如: 2024-05-15\n\n// 自定義格式\nconst customFormat = formatDate(new Date(), 'DD/MM/YYYY');\nconsole.log(customFormat); // 例如: 15/05/2024\n```\n\n函數接受兩個參數：\n1. `date`: 日期對象\n2. `format`: 格式字符串 (默認為 'YYYY-MM-DD')\n\n支持的格式占位符包括：\n- YYYY: 四位年份\n- MM: 兩位月份\n- DD: 兩位日期\n- HH: 兩位小時(24小時制)\n- mm: 兩位分鐘\n- ss: 兩位秒數",
+    "sources": [
+      {
+        "file_id": "681d5a006a50a00d67339f9e",
+        "file_path": "src/utils/dateUtils.js",
+        "file_name": "dateUtils.js",
+        "content": "/**\n * 格式化日期\n * @param {Date} date - 日期對象\n * @param {string} format - 格式字符串\n * @returns {string} 格式化後的日期字符串\n */\nexport function formatDate(date, format = 'YYYY-MM-DD') {\n  // 實現省略\n}",
+        "language": "javascript",
+        "score": 0.92,
+        "type": "code"
+      }
+    ],
+    "execution_time": 1.25
+  },
+  "query": "如何使用formatDate函數?"
+}
+```
+
+### RAG可視化
+
+#### 獲取消息可視化數據
 
 ```
 GET /rag/visualization/message/{message_id}
 ```
 
-路径参数:
+路徑參數:
 - `message_id`: 消息ID
 
-响应:
+響應:
 ```json
 {
   "success": true,
   "data": {
+    "message_id": "681d5a006a50a00d67339f9f",
+    "query": "如何使用formatDate函數?",
     "sources": [
       {
-        "id": 0,
-        "file_id": "60c72b2f9b1a8d001f3a0a2e",
-        "file_path": "src/auth/auth.js",
-        "file_name": "auth.js",
-        "content": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
-        "preview": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
-        "score": 0.85,
+        "file_id": "681d5a006a50a00d67339f9e",
+        "file_path": "src/utils/dateUtils.js",
+        "file_name": "dateUtils.js",
+        "content": "/**\n * 格式化日期\n * @param {Date} date - 日期對象\n * @param {string} format - 格式字符串\n * @returns {string} 格式化後的日期字符串\n */\nexport function formatDate(date, format = 'YYYY-MM-DD') {\n  // 實現省略\n}",
         "language": "javascript",
-        "type": "code",
-        "metadata": {
-          "line_start": 45,
-          "line_end": 48
-        }
+        "score": 0.92,
+        "type": "code"
       }
     ],
-    "summary": {
-      "total_sources": 1,
-      "code_sources": 1,
-      "doc_sources": 0,
-      "avg_score": 0.85
-    },
-    "file_types": {
-      "javascript": 1
+    "source_types": {
+      "code": 1
     }
   }
 }
 ```
 
-### 高亮匹配内容
+#### 高亮上下文匹配
 
 ```
 POST /rag/visualization/highlight
 ```
 
-请求体:
+請求體:
 ```json
 {
-  "query": "用户认证",
-  "context": "function authenticate(username, password) {\n  // 验证逻辑\n  return jwt.sign({ username }, SECRET_KEY);\n}",
+  "query": "formatDate函數",
+  "context": "/**\n * 格式化日期\n * @param {Date} date - 日期對象\n * @param {string} format - 格式字符串\n * @returns {string} 格式化後的日期字符串\n */\nexport function formatDate(date, format = 'YYYY-MM-DD') {\n  // 實現省略\n}",
   "language": "javascript"
 }
 ```
 
-响应:
+響應:
 ```json
 {
   "success": true,
   "data": {
-    "matched_lines": [
+    "highlighted_text": "/**\n * 格式化日期\n * @param {Date} date - 日期對象\n * @param {string} format - 格式字符串\n * @returns {string} 格式化後的日期字符串\n */\nexport function <mark>formatDate</mark>(date, format = 'YYYY-MM-DD') {\n  // 實現省略\n}",
+    "matches": [
       {
-        "line": 1,
-        "content": "function authenticate(username, password) {",
-        "matched_terms": ["认证"]
+        "start": 115,
+        "end": 125,
+        "text": "formatDate"
       }
-    ],
-    "context_lines": [
-      {
-        "line": 1,
-        "content": "function authenticate(username, password) {",
-        "is_match": true
-      },
-      {
-        "line": 2,
-        "content": "  // 验证逻辑",
-        "is_match": false
-      },
-      {
-        "line": 3,
-        "content": "  return jwt.sign({ username }, SECRET_KEY);",
-        "is_match": false
-      }
-    ],
-    "has_highlights": true,
-    "language": "javascript"
+    ]
   }
 }
 ```
 
-## 对话系统
+## 外部文檔管理
 
-### 创建对话会话
+外部文檔管理API提供了上傳、處理和查詢外部文檔的功能。
+
+### 上傳外部文檔
 
 ```
-POST /conversations/
+POST /external-documents/
 ```
 
-请求体:
-```json
-{
-  "title": "代码问答",
-  "project_id": "60c72b2f9b1a8d001f3a0a1d",
-  "repo_id": "60c72b2f9b1a8d001f3a0a1e",
-  "settings": {
-    "model": "gemini-2.5-flash",
-    "temperature": 0.7,
-    "max_tokens": 1000,
-    "context_limit": 5,
-    "include_code": true,
-    "include_docs": true
-  }
-}
-```
+請求類型: `multipart/form-data`
 
-响应:
+表單字段:
+- `file`: 文件數據 (必填)
+- `title`: 文檔標題 (必填)
+- `description`: 文檔描述 (可選)
+- `project_id`: 項目ID (可選)
+- `tags`: 標籤，逗號分隔 (可選)
+
+響應:
 ```json
 {
   "success": true,
-  "data": {
-    "_id": "60c72b2f9b1a8d001f3a0a2f",
-    "user_id": "507f1f77bcf86cd799439011",
-    "title": "代码问答",
-    "created_at": "2023-05-03T10:00:00Z",
-    "last_message_at": "2023-05-03T10:00:00Z",
-    "message_count": 0,
-    "settings": {
-      "model": "gemini-2.5-flash",
-      "temperature": 0.7,
-      "max_tokens": 1000,
-      "context_limit": 5,
-      "include_code": true,
-      "include_docs": true
-    }
-  }
+  "message": "Document uploaded successfully and processing started",
+  "document_id": "681d5a006a50a00d67339f9f",
+  "title": "項目計劃書",
+  "file_name": "項目計劃.pdf",
+  "processing_status": "pending"
 }
 ```
 
-### 获取对话会话列表
+### 獲取外部文檔列表
 
 ```
-GET /conversations/
+GET /external-documents/
 ```
 
-查询参数:
-- `skip` (可选): 分页跳过数量，默认为0
-- `limit` (可选): 分页限制数量，默认为20
-- `project_id` (可选): 按项目ID过滤
+查詢參數:
+- `project_id`: 項目ID (可選)
+- `status`: 處理狀態 (可選，可選值: pending, processing, completed, failed)
+- `skip`: 分頁跳過數量 (默認為0)
+- `limit`: 分頁限制數量 (默認為100)
 
-响应:
+響應:
 ```json
 {
   "success": true,
   "data": [
     {
-      "_id": "60c72b2f9b1a8d001f3a0a2f",
-      "user_id": "507f1f77bcf86cd799439011",
-      "title": "代码问答",
-      "created_at": "2023-05-03T10:00:00Z",
-      "last_message_at": "2023-05-03T10:00:00Z",
-      "message_count": 0
+      "id": "681d5a006a50a00d67339f9f",
+      "title": "項目計劃書",
+      "description": "詳細的項目計劃文檔",
+      "file_name": "項目計劃.pdf",
+      "file_size": 1024000,
+      "content_type": "application/pdf",
+      "url": "/uploads/documents/項目計劃.pdf",
+      "project_id": "681d5a006a50a00d67339f9d",
+      "uploaded_by": "507f1f77bcf86cd799439011",
+      "uploaded_at": "2024-05-15T08:30:00.000Z",
+      "processed": true,
+      "processing_status": "completed",
+      "total_chunks": 15,
+      "processed_chunks": 15,
+      "tags": ["計劃", "文檔"]
     }
   ],
   "total": 1,
   "skip": 0,
-  "limit": 20
+  "limit": 100
 }
 ```
 
-### 获取单个对话会话
+### 獲取外部文檔詳情
 
 ```
-GET /conversations/{conversation_id}
+GET /external-documents/{document_id}
 ```
 
-路径参数:
-- `conversation_id`: 对话会话ID
+路徑參數:
+- `document_id`: 文檔ID
 
-响应:
+響應:
 ```json
 {
   "success": true,
   "data": {
-    "_id": "60c72b2f9b1a8d001f3a0a2f",
-    "user_id": "507f1f77bcf86cd799439011",
-    "title": "代码问答",
-    "created_at": "2023-05-03T10:00:00Z",
-    "last_message_at": "2023-05-03T10:00:00Z",
-    "message_count": 0,
-    "settings": {
-      "model": "gemini-2.5-flash",
-      "temperature": 0.7,
-      "max_tokens": 1000,
-      "context_limit": 5,
-      "include_code": true,
-      "include_docs": true
-    }
+    "id": "681d5a006a50a00d67339f9f",
+    "title": "項目計劃書",
+    "description": "詳細的項目計劃文檔",
+    "file_name": "項目計劃.pdf",
+    "file_size": 1024000,
+    "content_type": "application/pdf",
+    "url": "/uploads/documents/項目計劃.pdf",
+    "project_id": "681d5a006a50a00d67339f9d",
+    "uploaded_by": "507f1f77bcf86cd799439011",
+    "uploaded_at": "2024-05-15T08:30:00.000Z",
+    "processed": true,
+    "processing_status": "completed",
+    "error_message": null,
+    "total_chunks": 15,
+    "processed_chunks": 15,
+    "tags": ["計劃", "文檔"]
   }
 }
 ```
 
-### 获取会话消息列表
+### 刪除外部文檔
 
 ```
-GET /conversations/{conversation_id}/messages
+DELETE /external-documents/{document_id}
 ```
 
-路径参数:
-- `conversation_id`: 对话会话ID
+路徑參數:
+- `document_id`: 文檔ID
 
-查询参数:
-- `skip` (可选): 分页跳过数量，默认为0
-- `limit` (可选): 分页限制数量，默认为50
-- `sort_order` (可选): 排序顺序，可选值为"asc"或"desc"，默认为"asc"
-
-响应:
+響應:
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "_id": "60c72b2f9b1a8d001f3a0a30",
-      "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
-      "user_id": "507f1f77bcf86cd799439011",
-      "role": "user",
-      "content": "如何实现用户认证功能?",
-      "type": "text",
-      "status": "completed",
-      "created_at": "2023-05-03T10:01:00Z",
-      "references": []
-    },
-    {
-      "_id": "60c72b2f9b1a8d001f3a0a31",
-      "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
-      "user_id": "507f1f77bcf86cd799439011",
-      "role": "assistant",
-      "content": "在这个仓库中，用户认证功能使用JWT实现...",
-      "type": "text",
-      "status": "completed",
-      "created_at": "2023-05-03T10:01:05Z",
-      "references": [
-        {
-          "file_path": "src/auth/auth.js",
-          "file_name": "auth.js",
-          "content": "function authenticate(username, password) {...}",
-          "score": 0.85,
-          "language": "javascript",
-          "type": "code",
-          "metadata": {
-            "line_start": 45,
-            "line_end": 48
-          }
-        }
-      ]
-    }
-  ],
-  "total": 2,
-  "skip": 0,
-  "limit": 50
+  "message": "Document deleted successfully"
 }
 ```
 
-### 在会话中创建消息
+### 重新處理外部文檔
 
 ```
-POST /conversations/{conversation_id}/messages
+POST /external-documents/{document_id}/reprocess
 ```
 
-路径参数:
-- `conversation_id`: 对话会话ID
+路徑參數:
+- `document_id`: 文檔ID
 
-请求体:
-```json
-{
-  "content": "如何实现用户认证功能?",
-  "type": "text",
-  "metadata": {}
-}
-```
-
-响应:
+響應:
 ```json
 {
   "success": true,
-  "data": {
-    "user_message": {
-      "_id": "60c72b2f9b1a8d001f3a0a30",
-      "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
-      "user_id": "507f1f77bcf86cd799439011",
-      "role": "user",
-      "content": "如何实现用户认证功能?",
-      "type": "text",
-      "status": "completed",
-      "created_at": "2023-05-03T10:01:00Z",
-      "references": []
-    },
-    "ai_message_id": "60c72b2f9b1a8d001f3a0a31"
-  }
-}
-```
-
-### WebSocket对话API
-
-系统提供两个WebSocket端点用于实时对话:
-
-```
-WebSocket: ws://localhost:8000/api/v1/ws/chat
-WebSocket: ws://localhost:8000/api/v1/ws/chat/{conversation_id}
-```
-
-#### 连接参数
-
-- `token` (可选): 用户身份验证令牌
-- `conversation_id` (可选): 要加入的会话ID
-- `reconnect_token` (可选): 用于断线重连的令牌
-
-#### 客户端发送消息格式
-
-##### 心跳消息
-```json
-{
-  "type": "ping"
-}
-```
-
-##### 订阅会话
-```json
-{
-  "type": "subscribe",
-  "conversation_id": "60c72b2f9b1a8d001f3a0a2f"
-}
-```
-
-##### 发送新消息
-```json
-{
-  "type": "message",
-  "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
-  "content": "如何实现用户认证功能?",
-  "metadata": {}
-}
-```
-
-##### 编辑消息
-```json
-{
-  "type": "edit_message",
-  "message_id": "60c72b2f9b1a8d001f3a0a30",
-  "content": "如何使用JWT实现用户认证功能?"
-}
-```
-
-##### 正在输入指示
-```json
-{
-  "type": "typing",
-  "conversation_id": "60c72b2f9b1a8d001f3a0a2f"
-}
-```
-
-#### 服务器响应格式
-
-##### 连接成功
-```json
-{
-  "type": "connected",
-  "data": {
-    "connection_id": "550e8400-e29b-41d4-a716-446655440000",
-    "user_id": "507f1f77bcf86cd799439011",
-    "reconnect_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
-}
-```
-
-##### 订阅成功
-```json
-{
-  "type": "subscribed",
-  "data": {
-    "conversation_id": "60c72b2f9b1a8d001f3a0a2f"
-  }
-}
-```
-
-##### 接收消息
-```json
-{
-  "type": "message",
-  "data": {
-    "_id": "60c72b2f9b1a8d001f3a0a30",
-    "conversation_id": "60c72b2f9b1a8d001f3a0a2f",
-    "user_id": "507f1f77bcf86cd799439011",
-    "role": "user",
-    "content": "如何实现用户认证功能?",
-    "type": "text",
-    "status": "completed",
-    "created_at": "2023-05-03T10:01:00Z"
-  }
-}
-```
-
-##### 心跳响应
-```json
-{
-  "type": "pong",
-  "timestamp": 1620032460.0
-}
-```
-
-##### 错误消息
-```json
-{
-  "type": "error",
-  "data": {
-    "message": "Invalid JSON message"
-  }
+  "message": "Document reprocessing started",
+  "document_id": "681d5a006a50a00d67339f9f"
 }
 ```
 
 ## AI 配置管理
 
-管理不同 AI 服务提供商的配置和凭证。
+管理不同 AI 服務提供商的配置和憑證。
 
-### 基础 URL
+### 基礎 URL
 
 ```
 /api/v1/ai/config/
 ```
 
-### 创建 AI 服务提供商配置
+### 創建 AI 服務提供商配置
 
 ```
 POST /ai/config/providers/
 ```
 
-请求体：
+請求體：
 ```json
 {
   "provider_name": "openai",
@@ -2567,12 +2448,12 @@ POST /ai/config/providers/
 }
 ```
 
-说明：
-- `provider_name` 必须是系统支持的提供商之一（如 "openai", "google", "anthropic", "azure_openai", "aws_bedrock"）
-- `api_key` 为 API 密钥，将被加密存储
-- `additional_config` 根据不同的提供商可能需要不同的配置项（如 Azure OpenAI 需要 endpoint URL）
+說明：
+- `provider_name` 必須是系統支持的提供商之一（如 "openai", "google", "anthropic", "azure_openai", "aws_bedrock"）
+- `api_key` 為 API 密鑰，將被加密存儲
+- `additional_config` 根據不同的提供商可能需要不同的配置項（如 Azure OpenAI 需要 endpoint URL）
 
-响应 (201 Created)：
+響應 (201 Created)：
 ```json
 {
   "id": "64a2f3d5c1b8d3d7f8a9e0b2",
@@ -2587,19 +2468,19 @@ POST /ai/config/providers/
 }
 ```
 
-### 获取 AI 服务提供商配置列表
+### 獲取 AI 服務提供商配置列表
 
 ```
 GET /ai/config/providers/
 ```
 
-查询参数：
-- `provider_name` (可选): 按提供商名称过滤
-- `is_active` (可选): 按激活状态过滤 (true/false)
-- `skip` (可选): 分页跳过数量, 默认为 0
-- `limit` (可选): 分页限制数量, 默认为 20
+查詢參數：
+- `provider_name` (可選): 按提供商名稱過濾
+- `is_active` (可選): 按激活狀態過濾 (true/false)
+- `skip` (可選): 分頁跳過數量, 默認為 0
+- `limit` (可選): 分頁限制數量, 默認為 20
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "success": true,
@@ -2622,16 +2503,16 @@ GET /ai/config/providers/
 }
 ```
 
-### 获取单个 AI 服务提供商配置
+### 獲取單個 AI 服務提供商配置
 
 ```
 GET /ai/config/providers/{config_id}
 ```
 
-路径参数：
-- `config_id`: AI 服务提供商配置的 ID
+路徑參數：
+- `config_id`: AI 服務提供商配置的 ID
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "id": "64a2f3d5c1b8d3d7f8a9e0b2",
@@ -2646,16 +2527,16 @@ GET /ai/config/providers/{config_id}
 }
 ```
 
-### 更新 AI 服务提供商配置
+### 更新 AI 服務提供商配置
 
 ```
 PUT /ai/config/providers/{config_id}
 ```
 
-路径参数：
-- `config_id`: AI 服务提供商配置的 ID
+路徑參數：
+- `config_id`: AI 服務提供商配置的 ID
 
-请求体：
+請求體：
 ```json
 {
   "display_name": "Updated OpenAI Key Name",
@@ -2665,11 +2546,11 @@ PUT /ai/config/providers/{config_id}
 }
 ```
 
-说明：
-- 所有字段都是可选的，只有提供的字段才会被更新
-- `provider_name` 通常不允许更改
+說明：
+- 所有字段都是可選的，只有提供的字段才會被更新
+- `provider_name` 通常不允許更改
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "id": "64a2f3d5c1b8d3d7f8a9e0b2",
@@ -2684,16 +2565,16 @@ PUT /ai/config/providers/{config_id}
 }
 ```
 
-### 删除 AI 服务提供商配置
+### 刪除 AI 服務提供商配置
 
 ```
 DELETE /ai/config/providers/{config_id}
 ```
 
-路径参数：
-- `config_id`: AI 服务提供商配置的 ID
+路徑參數：
+- `config_id`: AI 服務提供商配置的 ID
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "success": true,
@@ -2701,13 +2582,13 @@ DELETE /ai/config/providers/{config_id}
 }
 ```
 
-### 获取支持的 AI 服务提供商列表
+### 獲取支持的 AI 服務提供商列表
 
 ```
 GET /ai/config/supported-providers/
 ```
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "success": true,
@@ -2750,13 +2631,13 @@ GET /ai/config/supported-providers/
 }
 ```
 
-### 更新支持的 AI 服务提供商列表
+### 更新支持的 AI 服務提供商列表
 
 ```
 PUT /ai/config/supported-providers/
 ```
 
-请求体：
+請求體：
 ```json
 {
   "providers": [
@@ -2775,7 +2656,7 @@ PUT /ai/config/supported-providers/
 }
 ```
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "success": true,
@@ -2795,13 +2676,13 @@ PUT /ai/config/supported-providers/
 }
 ```
 
-### 根据模型名称列表更新提供商模型
+### 根據模型名稱列表更新提供商模型
 
 ```
 POST /ai/config/supported-providers/update-models
 ```
 
-请求体：
+請求體：
 ```json
 {
   "ai_model_names": [
@@ -2813,11 +2694,11 @@ POST /ai/config/supported-providers/update-models
 }
 ```
 
-说明：
-- 系统将自动识别每个模型名称属于哪个提供商，并更新相应提供商的模型列表
-- 若提供的模型名称无法识别，则会被忽略
+說明：
+- 系統將自動識別每個模型名稱屬於哪個提供商，並更新相應提供商的模型列表
+- 若提供的模型名稱無法識別，則會被忽略
 
-响应 (200 OK)：
+響應 (200 OK)：
 ```json
 {
   "success": true,

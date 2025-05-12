@@ -53,6 +53,169 @@ class RAGService:
         
         return merged_results
 
+    async def advanced_hybrid_search(self, 
+                                   query: str, 
+                                   repo_id: str,
+                                   project_id: Optional[str] = None,
+                                   collection: Optional[str] = None,
+                                   limit: int = 5,
+                                   file_types: Optional[List[str]] = None,
+                                   use_bm25: bool = True,
+                                   use_vector: bool = True,
+                                   fusion_method: str = "rrf") -> List[Dict[str, Any]]:
+        """执行高级混合检索"""
+        results = []
+        
+        # 1. 向量搜索
+        if use_vector:
+            vector_results = await self.search(query, repo_id, collection, limit, file_types)
+            results.append(("vector", vector_results))
+        
+        # 2. 关键词搜索 (BM25)
+        if use_bm25:
+            keyword_results = await self._keyword_search(query, repo_id, collection, limit, file_types)
+            results.append(("keyword", keyword_results))
+        
+        # 3. 如果有项目ID，搜索任务和评论
+        if project_id:
+            # 搜索任务
+            task_results = await task_embedding_service.semantic_search_tasks(query, project_id, limit)
+            # 转换任务结果格式以匹配其他结果
+            formatted_task_results = []
+            for task in task_results:
+                formatted_task_results.append({
+                    "file_id": task.get("id"),
+                    "file_path": "",
+                    "file_name": task.get("data", {}).get("summary", ""),
+                    "content": task.get("highlight", ""),
+                    "score": task.get("score", 0),
+                    "type": "task",
+                    "metadata": task.get("data", {})
+                })
+            results.append(("task", formatted_task_results))
+            
+            # 搜索评论
+            comment_results = await task_embedding_service.semantic_search_comments(query, project_id, limit)
+            # 转换评论结果格式以匹配其他结果
+            formatted_comment_results = []
+            for comment in comment_results:
+                formatted_comment_results.append({
+                    "file_id": comment.get("id"),
+                    "file_path": "",
+                    "file_name": comment.get("data", {}).get("task_summary", ""),
+                    "content": comment.get("data", {}).get("content", ""),
+                    "score": comment.get("score", 0),
+                    "type": "comment",
+                    "metadata": comment.get("data", {})
+                })
+            results.append(("comment", formatted_comment_results))
+            
+            # 搜索外部文档
+            external_doc_results = await self.external_document_service.search_external_docs(query, project_id, limit)
+            results.append(("external_doc", external_doc_results))
+        
+        # 4. 根据指定方法融合结果
+        if fusion_method == "rrf":
+            merged_results = self._merge_search_results_rrf(results, limit)
+        elif fusion_method == "weighted":
+            merged_results = self._merge_search_results_weighted(results, limit)
+        else:
+            merged_results = self._merge_search_results_simple(results, limit)
+        
+        return merged_results
+        
+    def _merge_search_results_rrf(self, search_results: List[Tuple[str, List[Dict[str, Any]]]], limit: int = 5) -> List[Dict[str, Any]]:
+        """使用Reciprocal Rank Fusion算法融合多个来源的搜索结果"""
+        # 1. 创建ID到结果的映射
+        id_to_result = {}
+        id_to_ranks = {}
+        
+        # 2. 处理每个来源的结果
+        for source_type, results in search_results:
+            for i, result in enumerate(results):
+                result_id = f"{result['type']}:{result['file_id']}"
+                
+                if result_id not in id_to_result:
+                    id_to_result[result_id] = result
+                    id_to_ranks[result_id] = {source_type: i + 1}
+                else:
+                    id_to_ranks[result_id][source_type] = i + 1
+        
+        # 3. 计算RRF分数
+        k = 60  # 常数参数
+        for result_id in id_to_ranks:
+            rrf_score = 0
+            for source_type, rank in id_to_ranks[result_id].items():
+                rrf_score += 1 / (k + rank)
+            
+            id_to_result[result_id]["rrf_score"] = rrf_score
+        
+        # 4. 排序并返回结果
+        merged_results = list(id_to_result.values())
+        merged_results.sort(key=lambda x: x.get("rrf_score", 0), reverse=True)
+        
+        return merged_results[:limit]
+    
+    def _merge_search_results_weighted(self, search_results: List[Tuple[str, List[Dict[str, Any]]]], limit: int = 5) -> List[Dict[str, Any]]:
+        """使用加权方法融合搜索结果"""
+        # 定义不同来源的权重
+        weights = {
+            "vector": 1.0,
+            "keyword": 0.8,
+            "task": 0.7,
+            "comment": 0.6,
+            "external_doc": 0.9
+        }
+        
+        # 创建ID到结果的映射
+        id_to_result = {}
+        
+        # 处理每个来源的结果
+        for source_type, results in search_results:
+            for i, result in enumerate(results):
+                result_id = f"{result['type']}:{result['file_id']}"
+                
+                # 计算加权分数
+                score = result.get("score", 0) * weights.get(source_type, 0.5)
+                
+                if result_id not in id_to_result:
+                    result["weighted_score"] = score
+                    id_to_result[result_id] = result
+                else:
+                    # 如果已存在，取较高的分数
+                    id_to_result[result_id]["weighted_score"] = max(
+                        id_to_result[result_id].get("weighted_score", 0),
+                        score
+                    )
+        
+        # 排序并返回结果
+        merged_results = list(id_to_result.values())
+        merged_results.sort(key=lambda x: x.get("weighted_score", 0), reverse=True)
+        
+        return merged_results[:limit]
+    
+    def _merge_search_results_simple(self, search_results: List[Tuple[str, List[Dict[str, Any]]]], limit: int = 5) -> List[Dict[str, Any]]:
+        """简单合并搜索结果（去重）"""
+        # 创建ID到结果的映射
+        id_to_result = {}
+        
+        # 处理每个来源的结果
+        for source_type, results in search_results:
+            for result in results:
+                result_id = f"{result['type']}:{result['file_id']}"
+                
+                if result_id not in id_to_result:
+                    id_to_result[result_id] = result
+                elif result.get("score", 0) > id_to_result[result_id].get("score", 0):
+                    # 如果已存在，保留分数更高的结果
+                    id_to_result[result_id] = result
+        
+        # 排序并返回结果
+        merged_results = list(id_to_result.values())
+        merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
+        return merged_results[:limit]
+
     async def _keyword_search(self, query: str, repo_id: str, collection: Optional[str] = None, 
                              limit: int = 5, file_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """执行关键词搜索"""
@@ -388,6 +551,88 @@ class RAGService:
         except Exception as e:
             logger.error(f"Error reranking results: {str(e)}")
             return results
+            
+    async def rerank_with_feedback(self, 
+                                  query: str, 
+                                  results: List[Dict[str, Any]], 
+                                  user_id: str,
+                                  project_id: Optional[str] = None,
+                                  limit: int = 5) -> List[Dict[str, Any]]:
+        """基于用户历史反馈重排序搜索结果"""
+        # 获取用户历史交互数据
+        user_interactions = await self._get_user_interactions(user_id, project_id)
+        
+        # 为每个结果计算个性化分数
+        for result in results:
+            # 基础分数
+            base_score = result.get("score", 0)
+            
+            # 个性化加权
+            personalized_score = base_score
+            
+            # 文档ID
+            doc_id = f"{result['type']}:{result['file_id']}"
+            
+            # 应用用户交互权重
+            if doc_id in user_interactions:
+                interaction = user_interactions[doc_id]
+                # 点击加权
+                personalized_score += interaction.get("clicks", 0) * 0.1
+                # 有用标记加权
+                personalized_score += interaction.get("helpful_marks", 0) * 0.2
+                # 收藏加权
+                personalized_score += interaction.get("bookmarks", 0) * 0.3
+            
+            # 保存个性化分数
+            result["personalized_score"] = personalized_score
+        
+        # 按个性化分数排序
+        results.sort(key=lambda x: x.get("personalized_score", 0), reverse=True)
+        
+        return results[:limit]
+
+    async def _get_user_interactions(self, user_id: str, project_id: Optional[str] = None) -> Dict[str, Dict[str, int]]:
+        """获取用户与文档的历史交互数据"""
+        interactions = {}
+        
+        # 构建查询条件
+        query = {"user_id": ObjectId(user_id)}
+        if project_id:
+            query["project_id"] = ObjectId(project_id)
+        
+        # 查询用户交互记录
+        cursor = self.embedding_service.mongodb.db.user_document_interactions.find(query)
+        
+        async for doc in cursor:
+            doc_id = doc["document_id"]
+            doc_type = doc["document_type"]
+            key = f"{doc_type}:{doc_id}"
+            
+            # 计算不同类型交互的计数
+            clicks = 0
+            helpful_marks = 0
+            bookmarks = 0
+            
+            if doc["interaction_type"] == "click":
+                clicks = doc.get("interaction_count", 1)
+            elif doc["interaction_type"] == "helpful":
+                helpful_marks = doc.get("interaction_count", 1)
+            elif doc["interaction_type"] == "bookmark":
+                bookmarks = 1
+            
+            # 更新或添加交互数据
+            if key in interactions:
+                interactions[key]["clicks"] += clicks
+                interactions[key]["helpful_marks"] += helpful_marks
+                interactions[key]["bookmarks"] += bookmarks
+            else:
+                interactions[key] = {
+                    "clicks": clicks,
+                    "helpful_marks": helpful_marks,
+                    "bookmarks": bookmarks
+                }
+        
+        return interactions
 
     async def rag_query(self, 
                         query: str, 
