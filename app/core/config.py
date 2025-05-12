@@ -62,11 +62,29 @@ class Settings(BaseSettings):
     CHROMA_COLLECTION_CODE: str = os.getenv("CHROMA_COLLECTION_CODE", "code_embeddings")
     CHROMA_COLLECTION_DOCS: str = os.getenv("CHROMA_COLLECTION_DOCS", "doc_embeddings")
     CHROMA_COLLECTION_TASKS: str = os.getenv("CHROMA_COLLECTION_TASKS", "task_embeddings")
+    CHROMA_COLLECTION_COMMENTS: str = os.getenv("CHROMA_COLLECTION_COMMENTS", "comment_embeddings")
+    CHROMA_COLLECTION_EXTERNAL_DOCS: str = os.getenv("CHROMA_COLLECTION_EXTERNAL_DOCS", "external_docs_embeddings")
+    CHROMA_COLLECTION_PROSE: str = os.getenv("CHROMA_COLLECTION_PROSE", "prose_embeddings")
     
     # 模型配置
     CODEBERT_MODEL: str = os.getenv("CODEBERT_MODEL", "microsoft/codebert-base")
     SENTENCE_TRANSFORMER_MODEL: str = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
 
+    # 文档处理配置
+    ALLOWED_DOCUMENT_TYPES: List[str] = [
+        "application/pdf", 
+        "text/plain", 
+        "application/msword", 
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel", 
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/markdown",
+        "application/rtf",
+        "text/csv"
+    ]
+    
     # LLM 配置
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "openai")  # openai, anthropic, google
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")

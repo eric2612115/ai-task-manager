@@ -30,6 +30,8 @@ class TaskEmbeddingService:
         
         # 创建或获取集合
         self._task_collection = None
+        self._comment_collection = None
+        self._prose_collection = None
         
         logger.info("TaskEmbeddingService initialized")
 
@@ -43,7 +45,7 @@ class TaskEmbeddingService:
                 self._load_sentence_transformer
             )
             
-            # 直接获取或创建集合，不使用嵌入函数
+            # 获取或创建任务集合
             try:
                 self._task_collection = self.client.get_collection(settings.CHROMA_COLLECTION_TASKS)
                 logger.info(f"Retrieved existing collection: {settings.CHROMA_COLLECTION_TASKS}")
@@ -51,6 +53,26 @@ class TaskEmbeddingService:
                 logger.info(f"Creating new collection: {settings.CHROMA_COLLECTION_TASKS}, Error: {str(e)}")
                 self._task_collection = self.client.create_collection(
                     name=settings.CHROMA_COLLECTION_TASKS
+                )
+            
+            # 获取或创建评论集合
+            try:
+                self._comment_collection = self.client.get_collection(settings.CHROMA_COLLECTION_COMMENTS)
+                logger.info(f"Retrieved existing collection: {settings.CHROMA_COLLECTION_COMMENTS}")
+            except Exception as e:
+                logger.info(f"Creating new collection: {settings.CHROMA_COLLECTION_COMMENTS}, Error: {str(e)}")
+                self._comment_collection = self.client.create_collection(
+                    name=settings.CHROMA_COLLECTION_COMMENTS
+                )
+            
+            # 获取或创建统一的散文集合（可选）
+            try:
+                self._prose_collection = self.client.get_collection(settings.CHROMA_COLLECTION_PROSE)
+                logger.info(f"Retrieved existing collection: {settings.CHROMA_COLLECTION_PROSE}")
+            except Exception as e:
+                logger.info(f"Creating new collection: {settings.CHROMA_COLLECTION_PROSE}, Error: {str(e)}")
+                self._prose_collection = self.client.create_collection(
+                    name=settings.CHROMA_COLLECTION_PROSE
                 )
         
         logger.info("Task embedding model initialized successfully")
@@ -134,7 +156,8 @@ class TaskEmbeddingService:
                     "status": task.get("status", ""),
                     "priority": task.get("priority", ""),
                     "created_at": task.get("created_at").isoformat() if task.get("created_at") else "",
-                    "updated_at": task.get("updated_at").isoformat() if task.get("updated_at") else ""
+                    "updated_at": task.get("updated_at").isoformat() if task.get("updated_at") else "",
+                    "type": "task"
                 }
                 
                 # 检查是否已存在，如果存在则更新
@@ -160,11 +183,126 @@ class TaskEmbeddingService:
                         logger.info(f"Added task embedding for task {task_id}")
                     except Exception as add_error:
                         logger.error(f"Error adding task embedding to ChromaDB: {str(add_error)}")
+                
+                # 同时添加到统一的散文集合（可选）
+                try:
+                    # 检查是否已存在
+                    try:
+                        self._prose_collection.get(ids=[f"task_{task_id}"])
+                        # 存在，更新
+                        self._prose_collection.update(
+                            ids=[f"task_{task_id}"],
+                            documents=[task_text],
+                            metadatas=[{**metadata, "content_type": "task"}],
+                            embeddings=[embedding]
+                        )
+                    except Exception as e:
+                        # 不存在，添加
+                        self._prose_collection.add(
+                            ids=[f"task_{task_id}"],
+                            documents=[task_text],
+                            metadatas=[{**metadata, "content_type": "task"}],
+                            embeddings=[embedding]
+                        )
+                except Exception as prose_error:
+                    logger.error(f"Error adding task to prose collection: {str(prose_error)}")
             
             return {"task_id": task_id, "success": True}
         except Exception as e:
             logger.error(f"Error generating embedding for task {task_id}: {str(e)}")
             return {"task_id": task_id, "success": False, "error": str(e)}
+
+    async def generate_comment_embedding(self, comment_id: str, content: str) -> Dict[str, Any]:
+        """生成评论的嵌入向量并存储到MongoDB和ChromaDB"""
+        await self.initialize_model()
+        
+        try:
+            # 准备文本
+            comment_text = content.strip()
+            if not comment_text:
+                return {"comment_id": comment_id, "success": False, "error": "Empty comment content"}
+            
+            # 生成嵌入
+            embedding = self.generate_task_embeddings_sync([comment_text])[0]
+            
+            # 更新MongoDB中的评论
+            await mongodb.db.comments.update_one(
+                {"_id": ObjectId(comment_id)},
+                {"$set": {
+                    "content_embedding": embedding,
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+            
+            # 添加到ChromaDB
+            comment = await mongodb.db.comments.find_one({"_id": ObjectId(comment_id)})
+            if comment:
+                # 获取相关任务信息
+                task_id = str(comment.get("task_id", ""))
+                task = await mongodb.db.tasks.find_one({"_id": ObjectId(task_id)}) if task_id else None
+                
+                # 准备元数据
+                metadata = {
+                    "comment_id": str(comment["_id"]),
+                    "task_id": task_id,
+                    "project_id": str(task["project_id"]) if task else "",
+                    "author_id": str(comment.get("author_id", "")),
+                    "created_at": comment.get("created_at").isoformat() if comment.get("created_at") else "",
+                    "updated_at": comment.get("updated_at").isoformat() if comment.get("updated_at") else "",
+                    "type": "comment"
+                }
+                
+                # 检查是否已存在，如果存在则更新
+                try:
+                    self._comment_collection.get(ids=[comment_id])
+                    # 存在，更新
+                    self._comment_collection.update(
+                        ids=[comment_id],
+                        documents=[comment_text],
+                        metadatas=[metadata],
+                        embeddings=[embedding]
+                    )
+                    logger.info(f"Updated comment embedding for comment {comment_id}")
+                except Exception as e:
+                    # 不存在或发生错误，添加
+                    try:
+                        self._comment_collection.add(
+                            ids=[comment_id],
+                            documents=[comment_text],
+                            metadatas=[metadata],
+                            embeddings=[embedding]
+                        )
+                        logger.info(f"Added comment embedding for comment {comment_id}")
+                    except Exception as add_error:
+                        logger.error(f"Error adding comment embedding to ChromaDB: {str(add_error)}")
+                
+                # 同时添加到统一的散文集合（可选）
+                try:
+                    # 检查是否已存在
+                    try:
+                        self._prose_collection.get(ids=[f"comment_{comment_id}"])
+                        # 存在，更新
+                        self._prose_collection.update(
+                            ids=[f"comment_{comment_id}"],
+                            documents=[comment_text],
+                            metadatas=[{**metadata, "content_type": "comment"}],
+                            embeddings=[embedding]
+                        )
+                    except Exception as e:
+                        # 不存在，添加
+                        self._prose_collection.add(
+                            ids=[f"comment_{comment_id}"],
+                            documents=[comment_text],
+                            metadatas=[{**metadata, "content_type": "comment"}],
+                            embeddings=[embedding]
+                        )
+                except Exception as prose_error:
+                    logger.error(f"Error adding comment to prose collection: {str(prose_error)}")
+            
+            return {"comment_id": comment_id, "success": True}
+        except Exception as e:
+            logger.error(f"Error generating embedding for comment {comment_id}: {str(e)}")
+            return {"comment_id": comment_id, "success": False, "error": str(e)}
 
     async def generate_all_tasks_embeddings(self, project_id: Optional[str] = None) -> Dict[str, Any]:
         """为所有任务生成嵌入"""
@@ -227,6 +365,70 @@ class TaskEmbeddingService:
             logger.error(f"Error generating embeddings for tasks: {str(e)}")
             return {"success": False, "error": str(e)}
 
+    async def generate_all_comments_embeddings(self, project_id: Optional[str] = None) -> Dict[str, Any]:
+        """为所有评论生成嵌入"""
+        await self.initialize_model()
+        
+        try:
+            # 如果指定了项目ID，先获取该项目的所有任务ID
+            task_ids = []
+            if project_id:
+                tasks = await mongodb.db.tasks.find({"project_id": ObjectId(project_id)}).to_list(length=None)
+                task_ids = [task["_id"] for task in tasks]
+                query = {"task_id": {"$in": task_ids}}
+            else:
+                query = {}
+            
+            # 查询评论
+            comments = await mongodb.db.comments.find(query).to_list(length=None)
+            
+            logger.info(f"Found {len(comments)} comments to generate embeddings for")
+            
+            # 处理结果
+            results = {
+                "total": len(comments),
+                "success": 0,
+                "failed": 0,
+                "failures": []
+            }
+            
+            # 批量处理
+            for comment in comments:
+                try:
+                    logger.info(f"Generating embedding for comment {comment['_id']}")
+                    result = await self.generate_comment_embedding(
+                        str(comment["_id"]), 
+                        comment.get("content", "")
+                    )
+                    
+                    if result["success"]:
+                        results["success"] += 1
+                    else:
+                        results["failed"] += 1
+                        results["failures"].append({
+                            "comment_id": str(comment["_id"]),
+                            "error": result.get("error", "Unknown error")
+                        })
+                except Exception as e:
+                    logger.error(f"Error generating embedding for comment {comment['_id']}: {str(e)}")
+                    results["failed"] += 1
+                    results["failures"].append({
+                        "comment_id": str(comment["_id"]),
+                        "error": str(e)
+                    })
+            
+            # 检查ChromaDB中的评论数量
+            try:
+                count = self._comment_collection.count()
+                logger.info(f"ChromaDB comment collection now has {count} comments")
+            except Exception as e:
+                logger.error(f"Error checking ChromaDB comment count: {str(e)}")
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error generating embeddings for comments: {str(e)}")
+            return {"success": False, "error": str(e)}
+
     async def semantic_search_tasks(self, query: str, project_id: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
         """使用语义搜索查找任务"""
         await self.initialize_model()
@@ -252,12 +454,10 @@ class TaskEmbeddingService:
             # 执行查询
             results = self._task_collection.query(
                 query_texts=[query],
-                where=where_clause if where_clause else None,
+                where=where_clause,
                 n_results=limit,
                 include=["documents", "metadatas", "distances"]
             )
-            
-            logger.info(f"Search results: {results}")
             
             # 处理结果
             search_results = []
@@ -300,43 +500,197 @@ class TaskEmbeddingService:
             logger.error(f"Error performing semantic search: {str(e)}")
             return []
 
+    async def semantic_search_comments(self, query: str, project_id: Optional[str] = None, task_id: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
+        """使用语义搜索查找评论"""
+        await self.initialize_model()
+        
+        try:
+            # 检查集合中的评论数量
+            try:
+                count = self._comment_collection.count()
+                logger.info(f"ChromaDB comment collection has {count} comments")
+                if count == 0:
+                    logger.warning("No comments in ChromaDB collection, returning empty results")
+                    return []
+            except Exception as e:
+                logger.error(f"Error checking ChromaDB comment count: {str(e)}")
+            
+            # 构建查询条件
+            where_clause = {}
+            if project_id:
+                where_clause["project_id"] = project_id
+            if task_id:
+                where_clause["task_id"] = task_id
+            
+            logger.info(f"Performing semantic search with query: '{query}', project_id: {project_id}, task_id: {task_id}, where_clause: {where_clause}")
+            
+            # 执行查询
+            results = self._comment_collection.query(
+                query_texts=[query],
+                where=where_clause,
+                n_results=limit,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            # 处理结果
+            search_results = []
+            
+            if results["ids"] and len(results["ids"][0]) > 0:
+                for i, comment_id in enumerate(results["ids"][0]):
+                    metadata = results["metadatas"][0][i]
+                    
+                    # 计算得分 (1.0 - 距离)
+                    score = 1.0 - (results["distances"][0][i] if results["distances"] else 0)
+                    
+                    # 获取完整评论
+                    comment = await mongodb.db.comments.find_one({"_id": ObjectId(comment_id)})
+                    
+                    if comment:
+                        # 获取关联的任务
+                        task = await mongodb.db.tasks.find_one({"_id": comment.get("task_id")})
+                        
+                        search_results.append({
+                            "type": "comment",
+                            "id": comment_id,
+                            "score": score,
+                            "data": {
+                                "content": comment.get("content", ""),
+                                "task_id": str(comment.get("task_id", "")),
+                                "task_summary": task.get("summary", "") if task else "",
+                                "author_id": str(comment.get("author_id", "")),
+                                "created_at": comment.get("created_at").isoformat() if comment.get("created_at") else ""
+                            }
+                        })
+            
+            logger.info(f"Processed {len(search_results)} comment search results")
+            return search_results
+        except Exception as e:
+            logger.error(f"Error performing comment semantic search: {str(e)}")
+            return []
+
+    async def semantic_search_prose(self, query: str, project_id: Optional[str] = None, content_types: Optional[List[str]] = None, limit: int = 20) -> List[Dict[str, Any]]:
+        """使用统一的散文集合进行语义搜索（任务、评论等）"""
+        await self.initialize_model()
+        
+        try:
+            # 检查集合中的项目数量
+            try:
+                count = self._prose_collection.count()
+                logger.info(f"ChromaDB prose collection has {count} items")
+                if count == 0:
+                    logger.warning("No items in ChromaDB prose collection, returning empty results")
+                    return []
+            except Exception as e:
+                logger.error(f"Error checking ChromaDB prose count: {str(e)}")
+            
+            # 构建查询条件
+            where_clause = {}
+            if project_id:
+                where_clause["project_id"] = project_id
+            if content_types and len(content_types) > 0:
+                where_clause["content_type"] = {"$in": content_types}
+            
+            logger.info(f"Performing prose semantic search with query: '{query}', where_clause: {where_clause}")
+            
+            # 执行查询
+            results = self._prose_collection.query(
+                query_texts=[query],
+                where=where_clause,
+                n_results=limit,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            # 处理结果
+            search_results = []
+            
+            if results["ids"] and len(results["ids"][0]) > 0:
+                for i, item_id in enumerate(results["ids"][0]):
+                    metadata = results["metadatas"][0][i]
+                    content_type = metadata.get("content_type", "")
+                    
+                    # 计算得分 (1.0 - 距离)
+                    score = 1.0 - (results["distances"][0][i] if results["distances"] else 0)
+                    
+                    if content_type == "task":
+                        task_id = metadata.get("task_id")
+                        task = await mongodb.db.tasks.find_one({"_id": ObjectId(task_id)})
+                        
+                        if task:
+                            search_results.append({
+                                "type": "task",
+                                "id": task_id,
+                                "score": score,
+                                "data": {
+                                    "summary": task.get("summary", ""),
+                                    "description": task.get("description", ""),
+                                    "status": task.get("status", ""),
+                                    "project_id": str(task.get("project_id", ""))
+                                }
+                            })
+                    
+                    elif content_type == "comment":
+                        comment_id = metadata.get("comment_id")
+                        comment = await mongodb.db.comments.find_one({"_id": ObjectId(comment_id)})
+                        
+                        if comment:
+                            search_results.append({
+                                "type": "comment",
+                                "id": comment_id,
+                                "score": score,
+                                "data": {
+                                    "content": comment.get("content", ""),
+                                    "task_id": str(comment.get("task_id", "")),
+                                    "author_id": str(comment.get("author_id", ""))
+                                }
+                            })
+            
+            logger.info(f"Processed {len(search_results)} prose search results")
+            return search_results
+        except Exception as e:
+            logger.error(f"Error performing prose semantic search: {str(e)}")
+            return []
+
     def _create_highlight(self, summary: str, description: str, query: str, max_length: int = 100) -> str:
-        """创建高亮显示文本"""
-        import re
-        
-        # 如果描述为空，直接返回摘要
-        if not description:
-            return summary[:max_length] + "..." if len(summary) > max_length else summary
-        
-        # 查找查询词在描述中的位置
-        description_lower = description.lower()
-        query_lower = query.lower()
-        
-        if query_lower in description_lower:
-            # 找到匹配位置
-            match_pos = description_lower.find(query_lower)
+        """创建高亮显示的文本片段"""
+        try:
+            # 简单实现：返回包含查询词的上下文
+            content = f"{summary}\n{description}" if description else summary
             
-            # 提取上下文
-            start_pos = max(0, match_pos - 40)
-            end_pos = min(len(description), match_pos + len(query) + 40)
+            # 查找查询词的位置
+            query_lower = query.lower()
+            content_lower = content.lower()
             
-            # 创建带有高亮标记的片段
-            context = description[start_pos:end_pos]
-            
-            # 添加省略号
-            if start_pos > 0:
-                context = "..." + context
-            if end_pos < len(description):
-                context = context + "..."
-            
-            # 添加高亮标记
-            pattern = re.compile(re.escape(query), re.IGNORECASE)
-            highlighted = pattern.sub(r'<mark>\g<0></mark>', context)
-            
-            return highlighted
-        
-        # 如果在描述中找不到查询词，返回摘要
-        return summary[:max_length] + "..." if len(summary) > max_length else summary
+            pos = content_lower.find(query_lower)
+            if pos >= 0:
+                # 找到了查询词，提取上下文
+                start = max(0, pos - 40)
+                end = min(len(content), pos + len(query) + 40)
+                
+                # 调整开始位置到单词边界
+                if start > 0:
+                    while start > 0 and content[start] != ' ':
+                        start -= 1
+                
+                # 调整结束位置到单词边界
+                if end < len(content):
+                    while end < len(content) and content[end] != ' ':
+                        end += 1
+                
+                highlight = content[start:end]
+                if start > 0:
+                    highlight = "..." + highlight
+                if end < len(content):
+                    highlight = highlight + "..."
+                
+                return highlight
+            else:
+                # 没有找到查询词，返回摘要的前一部分
+                if len(summary) <= max_length:
+                    return summary
+                return summary[:max_length] + "..."
+        except Exception as e:
+            logger.error(f"Error creating highlight: {str(e)}")
+            return summary[:100] + "..." if len(summary) > 100 else summary
 
 # 创建单例
 task_embedding_service = TaskEmbeddingService() 
